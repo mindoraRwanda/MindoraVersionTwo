@@ -1,0 +1,70 @@
+version: '3.9'
+
+services:
+  postgres:
+    image: postgres:15
+    container_name: mindora_postgres
+    restart: always
+    ports:
+      - "5100:5432"
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: 12345
+      POSTGRES_DB: postgres
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  qdrant:
+    image: qdrant/qdrant
+    container_name: mindora_qdrant
+    restart: always
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    volumes:
+      - qdrant_data:/qdrant/storage
+
+  vllm:
+    image: vllm/vllm-openai:latest
+    container_name: mindora_vllm
+    ports:
+      - "8001:8000"  # vLLM on port 8001, backend stays on 8000
+    environment:
+      - CUDA_VISIBLE_DEVICES=0
+    command: ["--model", "meta-llama/Meta-Llama-3-8B-Instruct", "--host", "0.0.0.0", "--port", "8000"]
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+  backend:
+    build: ./backend
+    container_name: mindora_backend
+    ports:
+      - "8000:8000"
+    depends_on:
+      - postgres
+      - qdrant
+    environment:
+      DATABASE_URL: postgres://postgres:12345@postgres:5432/postgres
+
+  frontend:
+    build: ./test-frontend
+    container_name: mindora_frontend
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+    environment:
+      REACT_APP_API_URL: http://backend:8000
+
+volumes:
+  postgres_data:
+  qdrant_data:
+
+
+
+

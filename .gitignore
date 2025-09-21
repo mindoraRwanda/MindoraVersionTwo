@@ -1,0 +1,83 @@
+# Python backend
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+venv/
+backend/venv/
+.env
+.venv
+pip-log.txt
+pip-delete-this-directory.txt
+backend/data/conversations.json
+backend/logs/
+backend/models/
+backend/datasources/
+
+# React frontend
+test-frontend/node_modules/
+test-frontend/.pnp
+test-frontend/.pnp.js
+test-frontend/coverage/
+test-frontend/build/
+test-frontend/.DS_Store
+test-frontend/.env.local
+test-frontend/.env.development.local
+test-frontend/.env.test.local
+test-frontend/.env.production.local
+test-frontend/npm-debug.log*
+test-frontend/yarn-debug.log*
+test-frontend/yarn-error.log*
+test-frontend/dist/
+test-frontend/.cache/
+node_modules/
+
+# Editor directories and files
+.idea/
+.vscode/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+.DS_Store
+Thumbs.db
+
+# Local Ollama files
+.ollama/
+
+# Temporary files
+*.log
+*.tmp
+*.temp
+temp/
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+
+# Environment variables
+.env.local
+.env.development
+.env.test
+.env.production
+
+COMPLETED_TASKS.md

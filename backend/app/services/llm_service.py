@@ -7,7 +7,8 @@ import requests
 import re
 import os
 from backend.app.services.retriever_service import RetrieverService
-from backend.app.services.emotion_classifier import classify_emotion
+from backend.app.services.emotion_classifier import classify_emotion as classify_emotion_legacy
+from backend.app.services.emotion_service import classify_emotion
 from backend.app.services.chatbot_insights_pipeline import detect_medication_mentions, detect_suicide_risk
 from backend.app.db.database import get_db
 from backend.app.db.models import Message, Conversation
@@ -421,10 +422,11 @@ class LLMService:
             else:
                 # Only run expensive operations for longer messages
                 analysis_start = time.time()
-                emotion = classify_emotion(user_message)
+                # Use legacy classifier for now to avoid async/await issues in sync context
+                emotion = classify_emotion_legacy(user_message)
                 emotion_confidence = 0.8  # Default confidence for local detection
                 emotion_intensity = "medium"  # Default intensity for local detection
-                emotion_reasoning = "Detected by local emotion classifier"
+                emotion_reasoning = "Detected by legacy emotion classifier (sync)"
                 suicide_flag = detect_suicide_risk(user_message)
                 meds_mentioned = detect_medication_mentions(user_message)
                 analysis_time = time.time() - analysis_start

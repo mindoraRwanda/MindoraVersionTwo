@@ -195,7 +195,7 @@ class LLMProviderFactory:
         Raises:
             ValueError: If provider is not supported
         """
-        # Auto-detect provider from environment or use default
+        # Auto-detect provider from environment only if not explicitly specified
         if not provider_name:
             if os.getenv("OPENAI_API_KEY"):
                 provider_name = "openai"

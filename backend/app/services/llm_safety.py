@@ -37,8 +37,13 @@ class SafetyManager:
     def is_safe_output(response: str) -> bool:
         """Check if model output contains unsafe content"""
         for pattern in UNSAFE_OUTPUT_PATTERNS:
-            if re.search(pattern, response, re.IGNORECASE):
-                return False
+            try:
+                if re.search(pattern, response, re.IGNORECASE):
+                    return False
+            except re.error as e:
+                print(f"Invalid regex pattern '{pattern}': {e}")
+                # Skip invalid patterns instead of crashing
+                continue
         return True
 
     @staticmethod

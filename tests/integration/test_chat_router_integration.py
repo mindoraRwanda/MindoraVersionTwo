@@ -11,7 +11,7 @@ from fastapi.testclient import TestClient
 from datetime import datetime
 
 from backend.app.routers.chat_router import router, get_llm_service, get_query_validator
-from backend.app.services.llm_service_refactored import LLMService
+from backend.app.services.llm_service import LLMService
 from backend.app.services.query_validator_langgraph import LangGraphQueryValidator
 from tests import TestFixtures
 

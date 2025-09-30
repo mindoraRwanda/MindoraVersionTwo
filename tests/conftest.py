@@ -11,7 +11,7 @@ from typing import AsyncGenerator, Dict, Any, List
 from unittest.mock import Mock, AsyncMock
 from datetime import datetime
 
-from backend.app.services.llm_service_refactored import LLMService
+from backend.app.services.llm_service import LLMService
 from backend.app.services.query_validator_langgraph import LangGraphQueryValidator
 from tests import TestUtils, TestFixtures
 

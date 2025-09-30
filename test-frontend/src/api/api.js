@@ -11,11 +11,12 @@ const getAuthHeaders = () => {
 export const login = (email, password) =>
   axios.post(`${API_BASE}/auth/login`, { email, password });
 
-export const register = (username, email, password) =>
+export const register = (username, email, password, gender) =>
   axios.post(`${API_BASE}/auth/signup`, {
     username,
     email,
     password,
+    gender: gender || undefined,
   });
 
 // Conversations

@@ -37,22 +37,35 @@ class RetrieverService:
         Returns a list of relevant text chunks.
         """
         start_time = time.time()
-        
-        # Use cached encoding
-        query_vector = list(self._encode_query(query))
-        
-        # Optimized search parameters for speed
-        results = self.qdrant.search(
-            collection_name=self.collection_name,
-            query_vector=query_vector,
-            limit=top_k,
-            search_params=SearchParams(
-                hnsw_ef=64,  # Reduced from 128 for faster search
-                exact=False  # Use approximate search for speed
+
+        try:
+            # Check if collection exists first
+            collections = self.qdrant.get_collections()
+            collection_names = [col.name for col in collections.collections]
+
+            if self.collection_name not in collection_names:
+                print(f"❌ RAG: Collection '{self.collection_name}' not found. Available: {collection_names}")
+                return []
+
+            # Use cached encoding
+            query_vector = list(self._encode_query(query))
+
+            # Optimized search parameters for speed
+            results = self.qdrant.search(
+                collection_name=self.collection_name,
+                query_vector=query_vector,
+                limit=top_k,
+                search_params=SearchParams(
+                    hnsw_ef=64,  # Reduced from 128 for faster search
+                    exact=False  # Use approximate search for speed
+                )
             )
-        )
-        
-        search_time = time.time() - start_time
-        print(f"RAG search completed in {search_time:.3f}s")
-        
-        return [hit.payload["text"] for hit in results if "text" in hit.payload]
+
+            search_time = time.time() - start_time
+            print(f"RAG search completed in {search_time:.3f}s")
+
+            return [hit.payload["text"] for hit in results if hit.payload and "text" in hit.payload]
+
+        except Exception as e:
+            print(f"❌ RAG Error: {e}")
+            return []

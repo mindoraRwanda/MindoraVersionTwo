@@ -220,9 +220,10 @@ class TestCulturalContextPrompts:
         prompt = CulturalContextPrompts.get_cultural_integration_prompt()
 
         assert isinstance(prompt, str)
-        assert "Ubuntu" in prompt
-        assert "Rwandan culture" in prompt
-        assert "cultural sensitivity" in prompt
+        assert "culturally aware Rwandan" in prompt
+        assert "Rwandan experience" in prompt
+        assert "cultural wisdom" in prompt
+        assert "gender" in prompt.lower()
 
     def test_get_resource_referral_prompt(self):
         """Test resource referral prompt."""
@@ -253,7 +254,7 @@ class TestResponseApproachPrompts:
         assert isinstance(prompt, str)
         assert "conversation context" in prompt.lower()
         assert "emotional progression" in prompt.lower()
-        assert "key themes" in prompt.lower()
+        assert "topics discussed" in prompt.lower()
 
     def test_get_memory_management_prompt(self):
         """Test memory management prompt."""

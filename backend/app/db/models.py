@@ -6,9 +6,10 @@ from .database import Base
 class User(Base):
     __tablename__ = 'users'
     id = Column(Integer, primary_key=True)
-    username = Column(Text, nullable=False) 
+    username = Column(Text, nullable=False)
     email = Column(Text, nullable=False, unique=True)  # Email remains unique
-    password = Column(Text, nullable=False) 
+    password = Column(Text, nullable=False)
+    gender = Column(String(20), nullable=True)  # male, female, other, prefer_not_to_say
     created_at = Column(TIMESTAMP, default=datetime.utcnow)
     conversations = relationship("Conversation", back_populates="user")
 

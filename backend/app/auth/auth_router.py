@@ -31,7 +31,7 @@ def signup(user: UserCreate, db: Session = Depends(get_db)):
         raise HTTPException(status_code=400, detail="Username already taken")
 
     hashed_pw = hash_password(user.password)
-    new_user = User(username=user.username, email=user.email, password=hashed_pw)
+    new_user = User(username=user.username, email=user.email, password=hashed_pw, gender=user.gender)
 
     db.add(new_user)
     db.commit()
@@ -42,7 +42,8 @@ def signup(user: UserCreate, db: Session = Depends(get_db)):
         "access_token": token,
         "token_type": "bearer",
         "user_id": new_user.id,
-        "username": new_user.username
+        "username": new_user.username,
+        "gender": new_user.gender
     }
 
 
@@ -58,7 +59,8 @@ def login(user_data: UserLogin, db: Session = Depends(get_db)):
         "access_token": token,
         "token_type": "bearer",
         "user_id": user.id,
-        "username": user.username
+        "username": user.username,
+        "gender": user.gender
     }
 
 

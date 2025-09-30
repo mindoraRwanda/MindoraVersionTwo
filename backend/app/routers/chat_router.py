@@ -1,37 +1,44 @@
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from typing import Optional, List, Dict, Any
+from backend.app.services.llm_service import LLMService
+from backend.app.services.query_validator_langgraph import LangGraphQueryValidator
 from datetime import datetime
 import json
 
-# Import the LLM service and query validator
-from backend.app.services.llm_service_refactored import LLMService
-from backend.app.services.query_validator_langgraph import LangGraphQueryValidator
+# Import service container for dependency injection
+from backend.app.services.service_container import get_service
 from backend.app.services.langgraph_state import QueryType
+from backend.app.auth.utils import get_current_user
+from backend.app.db.database import SessionLocal
 
 # Create a router
 router = APIRouter(prefix="/api", tags=["chat"])
 
-# Initialize the services (lazy loading)
-_llm_service = None
-_query_validator = None
-
+# Dependency injection functions using service container
 def get_llm_service():
-    """Lazy initialization of the LLM service"""
-    global _llm_service
-    if _llm_service is None:
-        _llm_service = LLMService(use_vllm=False, provider_name="ollama", model_name="gemma3:1b")
-
-    return _llm_service
+    """Get LLM service from service container"""
+    return get_service("llm_service")
 
 def get_query_validator():
-    """Lazy initialization of the query validator"""
-    global _query_validator
-    if _query_validator is None:
-        llm_service = get_llm_service()
-        _query_validator = LangGraphQueryValidator(llm_provider=llm_service.llm_provider)
+    """Get query validator from service container"""
+    return get_service("query_validator")
 
-    return _query_validator
+def get_session_manager():
+    """Get session manager from service container"""
+    return get_service("session_manager")
+
+def get_crisis_interceptor():
+    """Get crisis interceptor from service container"""
+    return get_service("crisis_interceptor")
+
+def get_state_router():
+    """Get state router from service container"""
+    return get_service("state_router")
+
+def get_langgraph_state_router():
+    """Get LangGraph state router from service container"""
+    return get_service("langgraph_state_router")
 
 # Define the message schema
 class Message(BaseModel):
@@ -50,8 +57,9 @@ conversation_store = {}
 @router.post("/chat", response_model=ChatResponse)
 async def chat(
     message: Message,
-    llm_service: LLMService = Depends(get_llm_service),
-    query_validator: LangGraphQueryValidator = Depends(get_query_validator)
+    llm_service = Depends(get_llm_service),
+    query_validator = Depends(get_query_validator),
+    current_user = Depends(get_current_user)
 ):
     """
     Enhanced chat endpoint with query validation.
@@ -76,6 +84,11 @@ async def chat(
 
     # Step 1: Execute the LangGraph workflow
     validation_result = None
+    should_proceed = False
+    is_crisis = False
+    query_type = "unclear"
+    routing_decision = "standard_processing"
+
     try:
         validation_result = await query_validator.execute_workflow(
             message.message,
@@ -92,16 +105,16 @@ async def chat(
 
         # Step 3: Handle different query types based on workflow decision
         if should_proceed:
-            # Only proceed to conversation for mental support or crisis queries
+            # Use new stateful conversation system for mental health queries
             if is_crisis:
-                # Crisis situation - route to crisis intervention
+                # Crisis situation - use crisis interceptor
                 response_text = await handle_crisis_query(message.message, validation_result)
             else:
-                # Mental health query - process with main LLM
-                response_text = await llm_service.generate_response(
-                    message.message,
-                    conversation_history=conversation
+                # Mental health query - use stateful conversation system
+                response_data = await handle_stateful_conversation(
+                    conversation_id, message.message, current_user.id, validation_result, conversation_history=conversation
                 )
+                response_text = response_data.get("response", "I'm here to support you.")
         else:
             # Do not proceed to conversation - return filtered response
             if query_type == "random_question":
@@ -117,11 +130,33 @@ async def chat(
         print(f"Query validation failed: {e}")
         response_text = await llm_service.generate_response(
             message.message,
-            conversation_history=conversation
+            conversation_history=conversation,
+            user_gender=current_user.gender
         )
 
     # Add assistant response to conversation
     timestamp = datetime.now().isoformat()
+
+    # Include LLM-enhanced conversation metadata if available
+    llm_enhanced_metadata = None
+    if should_proceed and not is_crisis:
+        # Check if this was an LLM-enhanced conversation (response_data would be defined)
+        try:
+            response_data = locals().get('response_data')
+            if response_data:
+                llm_enhanced_metadata = {
+                    "conversation_state": response_data.get("current_state", "unknown"),
+                    "response_type": response_data.get("response_type", "unknown"),
+                    "next_state": response_data.get("next_state", "unknown"),
+                    "confidence": response_data.get("confidence", 0.0),
+                    "llm_reasoning": response_data.get("llm_reasoning", ""),
+                    "cultural_considerations": response_data.get("cultural_considerations", {}),
+                    "suggested_actions": response_data.get("suggested_actions", []),
+                    "llm_enhanced": True
+                }
+        except (NameError, KeyError):
+            pass  # response_data not available, use None
+
     assistant_message = {
         "role": "assistant",
         "text": response_text,
@@ -130,7 +165,8 @@ async def chat(
             "query_type": validation_result.get("query_type", "unknown") if validation_result else "unknown",
             "confidence": validation_result.get("confidence", 0.0) if validation_result else 0.0,
             "routing_decision": validation_result.get("routing_decision", "unknown") if validation_result else "unknown"
-        } if validation_result else None
+        } if validation_result else None,
+        "llm_enhanced_conversation": llm_enhanced_metadata
     }
     conversation.append(assistant_message)
 
@@ -142,6 +178,96 @@ async def chat(
         timestamp=timestamp,
         conversation_id=conversation_id
     )
+
+
+async def handle_stateful_conversation(conversation_id: str, user_message: str,
+                                       user_id: str, validation_result: Dict[str, Any],
+                                       conversation_history: Optional[List[Dict[str, Any]]] = None) -> Dict[str, Any]:
+    """
+    Handle conversation using the LLM-enhanced stateful conversation system
+
+    Args:
+        conversation_id: Unique conversation identifier
+        user_message: User's message
+        user_id: User identifier
+        validation_result: Query validation results
+        conversation_history: Current conversation history for context
+
+    Returns:
+        Response data from LLM-enhanced stateful conversation system
+    """
+    try:
+        # Use LLM-enhanced router for intelligent state decisions
+        langgraph_router = get_langgraph_state_router()
+
+        # Get current session to merge conversation history
+        session_mgr = get_session_manager()
+        session = session_mgr.get_session(conversation_id)
+
+        # Update session with current conversation history for consistency
+        if conversation_history:
+            # Update session manager with the complete conversation history
+            for message in conversation_history:
+                if message["role"] == "user":
+                    session_mgr.add_message_to_history(conversation_id, "user", message.get("text", message.get("content", "")))
+                elif message["role"] == "assistant":
+                    session_mgr.add_message_to_history(conversation_id, "assistant", message.get("text", message.get("content", "")))
+
+        # Pass conversation context to the router
+        response_data = await langgraph_router.route_conversation(
+            conversation_id,
+            user_message,
+            emotion_data=validation_result.get("emotion_detection"),
+            cultural_context={"rwandan_context": True},
+            query_validation=validation_result
+        )
+
+        return response_data
+
+    except Exception as e:
+        print(f"Error in LLM-enhanced stateful conversation: {e}")
+        try:
+            # Fallback to basic state actions
+            session_mgr = get_session_manager()
+            session = session_mgr.get_session(conversation_id)
+            if not session:
+                session_mgr.create_session_with_id(conversation_id, user_id)
+
+            # Try to get state actions service
+            try:
+                from backend.app.services.state_actions import state_actions
+                response_data = await state_actions.execute_state_action(
+                    conversation_id, user_message
+                )
+                return response_data
+            except ImportError:
+                # If state_actions not available, use LLM service directly
+                llm_svc = get_llm_service()
+                fallback_response = await llm_svc.generate_response(
+                    user_message,
+                    conversation_history=conversation_history or [],
+                    user_gender="unknown"
+                )
+                return {
+                    "response": fallback_response,
+                    "current_state": "fallback",
+                    "response_type": "fallback"
+                }
+
+        except Exception as e2:
+            print(f"Error in fallback stateful conversation: {e2}")
+            # Final fallback to original LLM service
+            llm_svc = get_llm_service()
+            fallback_response = await llm_svc.generate_response(
+                user_message,
+                conversation_history=conversation_history or [],
+                user_gender="unknown"
+            )
+            return {
+                "response": fallback_response,
+                "current_state": "fallback",
+                "response_type": "fallback"
+            }
 
 
 async def handle_crisis_query(query: str, validation_result: Dict[str, Any]) -> str:
@@ -182,7 +308,7 @@ async def handle_crisis_query(query: str, validation_result: Dict[str, Any]) -> 
     @router.post("/validate-query")
     async def validate_query(
         message: Message,
-        query_validator: LangGraphQueryValidator = Depends(get_query_validator)
+        query_validator = Depends(get_query_validator)
     ):
         """
         Endpoint to validate a query without generating a full response.

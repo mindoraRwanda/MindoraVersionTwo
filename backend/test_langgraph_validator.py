@@ -5,7 +5,7 @@ Test script for the LangGraph Query Validator Service
 
 import asyncio
 from backend.app.services.query_validator_langgraph import LangGraphQueryValidator
-from backend.app.services.llm_service_refactored import LLMService
+from backend.app.services.llm_service import LLMService
 
 async def test_langgraph_validator():
     """Test the LangGraph query validator with various queries"""
@@ -13,7 +13,7 @@ async def test_langgraph_validator():
     print("=" * 60)
 
     # Initialize LLM service (this would normally be done in main.py)
-    llm_service = LLMService(use_vllm=False, provider_name="ollama", model_name="gemma3:1b")
+    llm_service = LLMService(use_vllm=False, provider_name="huggingface", model_name="HuggingFaceTB/SmolLM3-3B")
 
     # Initialize LangGraph validator with LLM provider
     validator = LangGraphQueryValidator(llm_provider=llm_service.llm_provider)

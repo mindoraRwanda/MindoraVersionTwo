@@ -198,8 +198,8 @@ class LangGraphConfig(TypedDict):
 DEFAULT_CONFIG: LangGraphConfig = {
     "max_steps": 10,
     "timeout_seconds": 30,
-    "llm_model": "gemma3:1b",
-    "temperature": 0.1,
+    "llm_model": "HuggingFaceTB/SmolLM3-3B",
+    "temperature": 0.9,
     "enable_memory": True,
     "enable_crisis_detection": True,
     "enable_context_analysis": True,

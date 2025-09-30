@@ -42,7 +42,7 @@ class ModelManager:
             self.chat_model = ChatOllama(
                 base_url=self.vllm_base_url,
                 model=self.model_name,
-                temperature=0.7
+                temperature=0.85
             )
             self.is_initialized = True
             print("LLM initialized with vLLM (Llama-3-8B-Instruct)")
@@ -65,7 +65,7 @@ class ModelManager:
             self.chat_model = ChatOllama(
                 base_url=self.ollama_base_url,
                 model=self.model_name,
-                temperature=0.7
+                temperature=0.85
             )
             self.is_initialized = True
             print(f"LLM initialized with Ollama model: {self.model_name}")

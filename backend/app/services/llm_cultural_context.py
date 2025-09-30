@@ -24,7 +24,7 @@ class RwandaCulturalManager:
 
     @staticmethod
     def get_grounding_exercise() -> str:
-        """Get Rwanda-culturally appropriate grounding exercise"""
+        """Get culturally resonant grounding exercise"""
         return GROUNDING_EXERCISE
 
 
@@ -54,11 +54,11 @@ class ResponseApproachManager:
         if emotion in EMOTION_RESPONSES:
             emotion_response = EMOTION_RESPONSES[emotion]
             approach.update({
-                "tone": emotion_response["tone"],
+                "tone": emotion_response.get("natural_tone", "empathetic"),
                 "cultural_element": cultural_elements.get("ubuntu_philosophy", ""),
-                "validation": emotion_response["validation"],
-                "exploration_question": emotion_response["exploration_question"],
-                "support_offering": emotion_response["support_offering"]
+                "validation": emotion_response.get("validation_approach", ""),
+                "exploration_question": emotion_response.get("exploration_style", ""),
+                "support_offering": emotion_response.get("support_style", "")
             })
         else:
             # Default neutral response

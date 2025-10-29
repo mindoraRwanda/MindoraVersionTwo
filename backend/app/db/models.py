@@ -1,24 +1,29 @@
 from sqlalchemy import Column, Integer, Text, ForeignKey, TIMESTAMP, String
 from sqlalchemy.orm import relationship
+from sqlalchemy.dialects.postgresql import UUID
 from datetime import datetime
+import uuid
 from .database import Base
 
 class User(Base):
     __tablename__ = 'users'
-    id = Column(Integer, primary_key=True)
-    username = Column(Text, nullable=False) 
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    uuid = Column(UUID(as_uuid=True), default=uuid.uuid4, unique=True, index=True, nullable=False)
+    username = Column(Text, nullable=False)
     email = Column(Text, nullable=False, unique=True)  # Email remains unique
-    password = Column(Text, nullable=False) 
+    password = Column(Text, nullable=False)
+    gender = Column(String(20), nullable=True)  # male, female, other, prefer_not_to_say
     created_at = Column(TIMESTAMP, default=datetime.utcnow)
     conversations = relationship("Conversation", back_populates="user")
 
 class Conversation(Base):
     __tablename__ = 'conversations'
-    id = Column(Integer, primary_key=True)
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    uuid = Column(UUID(as_uuid=True), default=uuid.uuid4, unique=True, index=True, nullable=False)
     user_id = Column(Integer, ForeignKey('users.id'), nullable=False)
     started_at = Column(TIMESTAMP, default=datetime.utcnow)
     last_activity_at = Column(TIMESTAMP, default=datetime.utcnow)  # added for tracking
-    
+
     user = relationship("User", back_populates="conversations")
     messages = relationship(
         "Message",
@@ -28,23 +33,25 @@ class Conversation(Base):
 
 class Message(Base):
     __tablename__ = 'messages'
-    id = Column(Integer, primary_key=True)
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    uuid = Column(UUID(as_uuid=True), default=uuid.uuid4, unique=True, index=True, nullable=False)
     conversation_id = Column(Integer, ForeignKey('conversations.id'), nullable=False)
     sender = Column(String(10), nullable=False)  # "user" or "bot"
     content = Column(Text, nullable=False)
     timestamp = Column(TIMESTAMP, default=datetime.utcnow)
-    
+
     conversation = relationship("Conversation", back_populates="messages")
 
 class EmotionLog(Base):
     __tablename__ = "emotion_logs"
 
-    id = Column(Integer, primary_key=True, index=True)
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    uuid = Column(UUID(as_uuid=True), default=uuid.uuid4, unique=True, index=True, nullable=False)
     user_id = Column(Integer, ForeignKey("users.id"))
     conversation_id = Column(Integer, ForeignKey("conversations.id", ondelete="CASCADE"))
     input_text = Column(Text)
     detected_emotion = Column(String(50))
-    timestamp = Column(TIMESTAMP, default=datetime.utcnow)    
+    timestamp = Column(TIMESTAMP, default=datetime.utcnow)
 
 
 

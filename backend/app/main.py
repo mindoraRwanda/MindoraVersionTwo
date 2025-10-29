@@ -1,98 +1,124 @@
 import os
 from dotenv import load_dotenv
+from pathlib import Path
 
-# Load environment variables from .env file
-load_dotenv()
+# Get the environment variable
+environment = os.getenv("ENVIRONMENT", "development").lower()
+
+# Construct the path to the environment-specific .env file in the root directory
+root_dir = Path(__file__).parent.parent.parent  # Go up three levels from backend/app/main.py
+env_file = root_dir / f".env.{environment}"
+
+# Load environment variables from the environment-specific file
+# Fall back to .env.example if the specific file doesn't exist
+if env_file.exists():
+    load_dotenv(env_file, override=True)
+    print(f"🔧 Loaded environment variables from {env_file}")
+else:
+    # Try to load from .env.example as a fallback
+    example_env_file = root_dir / ".env.example"
+    if example_env_file.exists():
+        load_dotenv(example_env_file, override=True)
+        print(f"🔧 Loaded environment variables from {example_env_file} (fallback)")
+    else:
+        print("⚠️ No environment file found, using system environment variables only")
+
+# Initialize the new settings system (lazy-loaded)
+from .settings import settings
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from contextlib import asynccontextmanager
-from backend.app.routers.chat_router import router as chat_router
+
 
 # Import your database engine and models
-from backend.app.db.database import engine
-from backend.app.db import models
-from backend.app.db.database import Base
-from backend.app.auth.auth_router import router as auth_router
-from backend.app.auth.emotion_router import router as emotion_router
-from backend.app.auth.emotion_router import router as mental_health_router
-from backend.app.routers.conversations_router import router as conversations_router
-from backend.app.routers.messages_router import router as messages_router
+try:
+    from .db.database import engine
+    from .db import models
+except ImportError:
+    from .db.database import engine
+    from .db import models
 
-# Import the refactored LLM service
-from backend.app.services.llm_service_refactored import LLMService
-from backend.app.services.emotion_classifier import initialize_emotion_classifier
-from backend.app.services.rag_service import initialize_rag_service
-from backend.app.services.query_validator_langgraph import initialize_langgraph_query_validator
+try:
+    from .auth.auth_router import router as auth_router
+    from .auth.emotion_router import router as emotion_router
+    from .auth.emotion_router import router as mental_health_router
+except ImportError:
+    from .auth.auth_router import router as auth_router
+    from .auth.emotion_router import router as emotion_router
+    from .auth.emotion_router import router as mental_health_router
 
-# Global service instances
-llm_service = None
-emotion_classifier = None
-rag_service = None
-query_validator = None
+try:
+    from .routers.conversations_router import router as conversations_router
+    from .routers.messages_router import router as messages_router
+except ImportError:
+    from .routers.conversations_router import router as conversations_router
+    from .routers.messages_router import router as messages_router
+
+# Import service container for global service management
+try:
+    from .services.service_container import service_container, check_service_health
+except ImportError:
+    from .services.service_container import service_container, check_service_health
 
 # TEMPORARY: Drop everything before recreating
 models.Base.metadata.create_all(bind=engine)  # ❗️ This rebuilds all tables
 
-
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    """Application lifespan manager for startup and shutdown events."""
-    global llm_service, emotion_classifier, rag_service, query_validator
-
-    # Startup: Initialize all services
-    print("🚀 Starting up Therapy Chatbot API...")
-    
-    # Initialize Emotion Classifier
-    try:
-        emotion_classifier = initialize_emotion_classifier()
-        print("✅ Emotion classifier initialized successfully")
-    except Exception as e:
-        print(f"⚠️  Warning: Emotion classifier failed to initialize: {e}")
-
-    # Initialize RAG Service
-    try:
-        rag_service = initialize_rag_service()
-        print("✅ RAG service initialized successfully")
-    except Exception as e:
-        print(f"⚠️  Warning: RAG service failed to initialize: {e}")
-
-    # Initialize LLM Service
-    llm_service = LLMService(use_vllm=False, provider_name="groq", model_name="openai/gpt-oss-120b")  # Set to True if using vLLM
-    if not llm_service.initialize():
-        print("⚠️  Warning: LLM service failed to initialize. Some features may not work.")
-        print(f"Error: {llm_service.initialization_error}")
-    else:
-        print("✅ LLM service initialized successfully")
-
-    # Initialize LangGraph Query Validator
-    try:
-        query_validator = initialize_langgraph_query_validator(llm_service.llm_provider if llm_service else None)
-        print("✅ LangGraph query validator initialized successfully")
-    except Exception as e:
-        print(f"⚠️  Warning: LangGraph query validator failed to initialize: {e}")
-
-    yield
-
-    # Shutdown: Cleanup resources
-    print("🛑 Shutting down Therapy Chatbot API...")
-
-
+# Create FastAPI app first
 app = FastAPI(
-    title="Therapy Chatbot API",
-    lifespan=lifespan
+    title=settings.api_title,
+    version=settings.api_version,
+    debug=settings.debug
 )
+
+# Startup event handler for service initialization
+@app.on_event("startup")
+async def startup_event():
+    """Initialize services during application startup."""
+    print("🚀 Starting up Therapy Chatbot API with service container...")
+
+    try:
+        # Initialize all services using the service container
+        print("🔧 Initializing services...")
+        success = await service_container.initialize_all_services()
+        if not success:
+            print("❌ Failed to initialize services")
+            raise RuntimeError("Service initialization failed")
+
+        # Check service health
+        print("🏥 Checking service health...")
+        health_status = await check_service_health()
+        print("📊 Service Health Status:")
+        healthy_count = 0
+        for service_name, status in health_status.items():
+            status_icon = "✅" if status["healthy"] else "❌"
+            print(f"  {status_icon} {service_name}")
+            if status["healthy"]:
+                healthy_count += 1
+
+        print(f"✅ {healthy_count}/{len(health_status)} services healthy")
+        print("✅ Application startup complete")
+
+    except Exception as e:
+        print(f"❌ Error during startup: {e}")
+        raise
+
+# Shutdown event handler
+@app.on_event("shutdown")
+async def shutdown_event():
+    """Cleanup services during application shutdown."""
+    print("🛑 Shutting down Therapy Chatbot API...")
+    await service_container.shutdown_all_services()
+    print("✅ Application shutdown complete")
 
 # Include routers
 app.include_router(auth_router)  # Authentication endpoints
 app.include_router(conversations_router)  # Conversation management
 app.include_router(messages_router)  # Message handling
-app.include_router(chat_router)  # Chat functionality
 
-# CORS for frontend (adjust domains as needed)
+# CORS for frontend (using settings)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],  # Frontend origin
+    allow_origins=settings.cors_origins,  # From settings
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -104,49 +130,3 @@ async def root():
 
 app.include_router(emotion_router)
 app.include_router(mental_health_router, prefix="/insights")
-
-# if __name__ == "__main__":
-#     import uvicorn
-#     uvicorn.run(app, host="0.0.0.0", port=8000)
-
-
-
-#New code
-# from fastapi import FastAPI
-# from fastapi.middleware.cors import CORSMiddleware
-
-# from backend.app.routers.chat_router import router as chat_router
-# from backend.app.auth.auth_router import router as auth_router
-# from backend.app.auth.emotion_router import router as emotion_router
-# from backend.app.auth.emotion_router import router as mental_health_router  # ✅ Correct source
-
-# from backend.app.db.database import engine
-# from backend.app.db import models
-
-# # Create DB tables
-# models.Base.metadata.create_all(bind=engine)
-
-# app = FastAPI(title="Therapy Chatbot API")
-
-# # CORS setup
-# app.add_middleware(
-#     CORSMiddleware,
-#     allow_origins=["http://localhost:3000"],  # adjust as needed
-#     allow_credentials=True,
-#     allow_methods=["*"],
-#     allow_headers=["*"],
-# )
-
-# # Register routers
-# app.include_router(auth_router)
-# app.include_router(chat_router)
-# app.include_router(emotion_router)
-# app.include_router(mental_health_router, prefix="/insights")  # 
-
-# @app.get("/")
-# async def root():
-#     return {"message": "Therapy Chatbot API is running"}
-
-# if __name__ == "__main__":
-#     import uvicorn
-#     uvicorn.run(app, host="0.0.0.0", port=8000)

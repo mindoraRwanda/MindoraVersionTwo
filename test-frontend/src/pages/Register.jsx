@@ -7,14 +7,16 @@ export default function Register() {
   const [email, setEmail] = useState('');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [gender, setGender] = useState('');
   const [error, setError] = useState(null);
   const navigate = useNavigate();
 
   const handleRegister = async () => {
   try {
-    const res = await register(username, email, password);
+    const res = await register(username, email, password, gender);
     localStorage.setItem('token', res.data.access_token);
     localStorage.setItem('user_id', res.data.user_id);
+    localStorage.setItem('gender', res.data.gender || '');
 
     // Create first conversation
     const conv = await startNewChat();
@@ -143,13 +145,7 @@ export default function Register() {
           <h1 className="brand">Mindora Bot</h1>
           <h2 className="form-title">Create Account</h2>
 
-          <input
-            type="email"
-            placeholder="Email"
-            value={email}
-            onChange={e => setEmail(e.target.value)}
-            className="input-field"
-          />
+
           <input
             type="text"
             placeholder="Username"
@@ -157,6 +153,28 @@ export default function Register() {
             onChange={e => setUsername(e.target.value)}
             className="input-field"
           />
+
+          <input
+            type="email"
+            placeholder="Email"
+            value={email}
+            onChange={e => setEmail(e.target.value)}
+            className="input-field"
+          />
+          
+          
+          <select
+            value={gender}
+            onChange={e => setGender(e.target.value)}
+            className="input-field"
+          >
+            <option value="">Select Gender (Optional)</option>
+            <option value="male">Male</option>
+            <option value="female">Female</option>
+            <option value="other">Other</option>
+            <option value="prefer_not_to_say">Prefer not to say</option>
+          </select>
+
           <input
             type="password"
             placeholder="Password"
@@ -164,6 +182,7 @@ export default function Register() {
             onChange={e => setPassword(e.target.value)}
             className="input-field"
           />
+
 
           <button onClick={handleRegister} className="submit-btn">
             Register
@@ -175,7 +194,7 @@ export default function Register() {
         <div className="welcome-panel">
           <h2>Welcome to Mindora</h2>
           <p>Already have an account?</p>
-          <a href="/login" className="login-link">Sign In</a>
+          <a href="/" className="login-link">Sign In</a>
         </div>
       </div>
     </div>

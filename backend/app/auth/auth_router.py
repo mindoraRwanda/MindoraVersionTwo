@@ -1,9 +1,9 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from backend.app.auth.schemas import UserCreate, UserLogin, TokenResponse
-from backend.app.auth.utils import hash_password, verify_password, create_access_token
-from backend.app.db.database import SessionLocal
-from backend.app.db.models import User
+from .schemas import UserCreate, UserLogin, TokenResponse
+from .utils import hash_password, verify_password, create_access_token
+from ..db.database import SessionLocal
+from ..db.models import User
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
@@ -31,18 +31,19 @@ def signup(user: UserCreate, db: Session = Depends(get_db)):
         raise HTTPException(status_code=400, detail="Username already taken")
 
     hashed_pw = hash_password(user.password)
-    new_user = User(username=user.username, email=user.email, password=hashed_pw)
+    new_user = User(username=user.username, email=user.email, password=hashed_pw, gender=user.gender)
 
     db.add(new_user)
     db.commit()
     db.refresh(new_user)
 
-    token = create_access_token(data={"sub": str(new_user.id)})
+    token = create_access_token(data={"sub": str(new_user.uuid)})
     return {
         "access_token": token,
         "token_type": "bearer",
-        "user_id": new_user.id,
-        "username": new_user.username
+        "user_id": new_user.uuid,
+        "username": new_user.username,
+        "gender": new_user.gender
     }
 
 
@@ -53,13 +54,18 @@ def login(user_data: UserLogin, db: Session = Depends(get_db)):
     if not user or not verify_password(user_data.password, user.password):
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
-    token = create_access_token({"sub": str(user.id)})
-    return {
+    token = create_access_token({"sub": str(user.uuid)})
+    data =  {
         "access_token": token,
         "token_type": "bearer",
-        "user_id": user.id,
-        "username": user.username
+        "user_id": user.uuid,
+        "username": user.username,
+        "gender": user.gender
     }
+
+    print(f"Login successful for user: {data}")
+
+    return data
 
 
 

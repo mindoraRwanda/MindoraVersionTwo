@@ -3,35 +3,36 @@ import bleach
 import time
 import json
 from sqlalchemy.orm import Session
-from typing import List, Dict, Any
-from backend.app.auth.utils import get_current_user
-from backend.app.db.database import SessionLocal
-from backend.app.db.models import Conversation, Message, User, EmotionLog
-from backend.app.auth.schemas import MessageCreate, MessageOut
-from backend.app.services.emotion_classifier import classify_emotion
-from backend.app.services.query_validator_langgraph import LangGraphQueryValidator
-from backend.app.services.langgraph_state import QueryType
+from typing import List, Dict, Any, Optional
+from ..auth.utils import get_current_user
+from ..settings.settings import settings
+from ..db.database import SessionLocal
+from ..db.models import Conversation, Message, User, EmotionLog
+from ..auth.schemas import MessageCreate, MessageOut
+# Removed: unified_conversation_workflow (consolidated into stateful_pipeline)
+from backend.app.services.stateful_pipeline import StatefulMentalHealthPipeline
 
-# Import the global LLM service instance (will be initialized on startup)
+# Import the new stateful conversation system
+from backend.app.services.session_state_manager import session_manager
+
+# Import service container for dependency injection
 def get_llm_service():
-    """Get the global LLM service instance."""
-    from backend.app.main import llm_service
-    if not llm_service:
-        raise HTTPException(
-            status_code=503,
-            detail="LLM service not initialized. Please try again later."
-        )
-    return llm_service
+    """Get LLM service from service container."""
+    from ..services.service_container import get_service
+    return get_service("llm_service")
 
-def get_query_validator():
-    """Get the global query validator instance."""
-    from backend.app.main import query_validator
-    if not query_validator:
-        raise HTTPException(
-            status_code=503,
-            detail="Query validator not initialized. Please try again later."
-        )
-    return query_validator
+# Removed: get_unified_workflow (consolidated into stateful_pipeline)
+
+def get_stateful_pipeline():
+    """Get stateful mental health pipeline from service container."""
+    from ..services.service_container import get_service
+    try:
+        return get_service("stateful_pipeline")
+    except Exception:
+        # Fallback to creating a new instance
+        from ..services.stateful_pipeline import initialize_stateful_pipeline
+        llm_service = get_service("llm_service")
+        return initialize_stateful_pipeline(llm_provider=llm_service.llm_provider if llm_service else None)
 
 router = APIRouter(prefix="/auth", tags=["Messages"])
 
@@ -50,17 +51,20 @@ async def send_message(
     message: MessageCreate,
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
-    llm_service = Depends(get_llm_service),
-    query_validator: LangGraphQueryValidator = Depends(get_query_validator)
+    stateful_pipeline: StatefulMentalHealthPipeline = Depends(get_stateful_pipeline)
 ):
     """
-    Enhanced message endpoint with LangGraph query validation.
+    Enhanced message endpoint with stateful LangGraph mental health pipeline.
 
-    This endpoint now uses LangGraph query validation to:
-    1. Validate if the query is mental health related
-    2. Filter out unrelated questions
-    3. Route appropriate queries to the main LLM service
-    4. Provide contextual responses for off-topic queries
+    This endpoint now uses a stateful LangGraph pipeline that provides:
+    1. Comprehensive query validation with confidence scoring
+    2. Crisis detection with severity classification
+    3. Emotion detection with youth-specific patterns
+    4. Specialized response nodes for different strategies
+    5. Full explainability and transparency
+    6. Cultural context integration throughout
+
+    The pipeline provides complete explainability for all processing decisions.
     """
     pipeline_start = time.time()
     print(f"\n🚀 Starting enhanced message pipeline for user {user.id}")
@@ -68,7 +72,7 @@ async def send_message(
     # Single query to verify conversation ownership
     db_start = time.time()
     convo = db.query(Conversation).filter_by(
-        id=message.conversation_id,
+        uuid=message.conversation_id,
         user_id=user.id
     ).first()
     db_lookup_time = time.time() - db_start
@@ -89,7 +93,7 @@ async def send_message(
     # Load conversation history for context
     history_start = time.time()
     recent_history = db.query(Message)\
-        .filter_by(conversation_id=message.conversation_id)\
+        .filter_by(conversation_id=convo.id)\
         .order_by(Message.timestamp.desc())\
         .limit(15)\
         .all()
@@ -101,80 +105,60 @@ async def send_message(
     history_time = time.time() - history_start
     print(f"⏱️  DB history load: {history_time:.3f}s ({len(recent_history)} messages)")
 
-    # Step 1: Execute the LangGraph workflow
-    validation_result = None
+    # Use the stateful mental health pipeline for end-to-end processing
+    workflow_start = time.time()
+    pipeline_result = {}  # Initialize to avoid unbound variable
+
     try:
-        validation_result = await query_validator.execute_workflow(
-            clean_content,
-            conversation_history=conversation_history
+        # Execute the stateful pipeline - handles validation, crisis detection, emotion detection, and response generation
+        pipeline_result = await stateful_pipeline.process_query(
+            query=clean_content,
+            user_id=str(user.id),
+            conversation_history=conversation_history,
+            user_gender=user.gender  # Pass user gender for cultural context
         )
 
-        # Step 2: Check if conversation should proceed
-        should_proceed = validation_result.get("should_proceed_to_conversation", False)
-        query_type = validation_result.get("query_type", "unclear")
-        is_crisis = validation_result.get("is_crisis", False)
-        routing_decision = validation_result.get("routing_decision", "standard_processing")
+        bot_reply = pipeline_result.get("response", "I'm here to support you.")
+        response_confidence = pipeline_result.get("response_confidence", 0.0)
+        processing_metadata = pipeline_result.get("processing_metadata", [])
 
-        print(f"Query validation result: {json.dumps(validation_result, indent=2)}")
-
-        # Step 3: Handle different query types based on routing decision
-        if routing_decision == "crisis_intervention":
-            # Crisis situation - route to crisis intervention
-            bot_reply = await handle_crisis_query(clean_content, validation_result)
-        elif routing_decision == "mental_health_support":
-            # Mental health query - process with main LLM with emotion context
-            llm_start = time.time()
-            emotion_data = validation_result.get("emotion_detection", {})
-            bot_reply = await llm_service.generate_response(clean_content, conversation_history, str(user.id), skip_analysis=False, emotion_data=emotion_data)
-            llm_time = time.time() - llm_start
-            print(f"⏱️  LLM generation: {llm_time:.3f}s ({len(bot_reply)} chars)")
-        elif routing_decision == "random_question_filtered":
-            # Random question - return filtered response
-            bot_reply = await handle_random_question(clean_content, validation_result)
-        elif routing_decision == "clarification_needed":
-            # Unclear query - ask for clarification
-            bot_reply = await handle_unclear_query(clean_content, validation_result)
-        elif routing_decision == "standard_processing":
-            # Default processing - use main LLM with emotion context
-            llm_start = time.time()
-            emotion_data = validation_result.get("emotion_detection", {})
-            bot_reply = await llm_service.generate_response(clean_content, conversation_history, str(user.id), skip_analysis=False, emotion_data=emotion_data)
-            llm_time = time.time() - llm_start
-            print(f"⏱️  LLM generation: {llm_time:.3f}s ({len(bot_reply)} chars)")
-        else:
-            # Fallback for unknown routing decisions
-            bot_reply = validation_result.get("final_response", "I'm here to help with mental health and emotional support. Could you please clarify what you'd like help with?")
+        workflow_time = time.time() - workflow_start
+        print(f"⏱️  Stateful pipeline processing: {workflow_time:.3f}s ({len(bot_reply)} chars)")
+        print(f"🤖 Response confidence: {response_confidence:.2f}")
+        print(f"📊 Processing steps: {len(processing_metadata)}")
 
     except Exception as e:
-        # Fallback to original behavior if validation fails
-        print(f"Query validation failed: {e}")
-        llm_start = time.time()
-        # No emotion data available in fallback case
-        bot_reply = await llm_service.generate_response(clean_content, conversation_history, str(user.id))
-        llm_time = time.time() - llm_start
-        print(f"⏱️  Fallback LLM generation: {llm_time:.3f}s ({len(bot_reply)} chars)")
+        print(f"Stateful pipeline failed: {e}")
+        # Final fallback to basic response
+        bot_reply = "I'm here to support you. How can I help you today?"
+        workflow_time = time.time() - workflow_start
+        print(f"⏱️  Fallback processing: {workflow_time:.3f}s")
 
-    # Get emotion data from LangGraph validation result
-    emotion_detection = validation_result.get("emotion_detection", {}) if validation_result else {}
-    detected_emotion = emotion_detection.get("detected_emotion", "neutral") if isinstance(emotion_detection, dict) else "neutral"
+    # Get emotion data from stateful pipeline result
+    emotion_detection = pipeline_result.get("emotion_detection") if 'pipeline_result' in locals() else None
+    detected_emotion = emotion_detection.selected_emotion if emotion_detection and hasattr(emotion_detection, 'selected_emotion') else "neutral"
+    
+    # Get query evaluation data for routing decision
+    query_evaluation = pipeline_result.get("query_evaluation") if 'pipeline_result' in locals() else None
+    routing_decision = query_evaluation.evaluation_type.value if query_evaluation and hasattr(query_evaluation, 'evaluation_type') else "GIVE_EMPATHY"
 
     # Batch database operations - create all objects first
     db_prep_start = time.time()
     user_msg = Message(
-        conversation_id=message.conversation_id,
+        conversation_id=convo.id,
         sender="user",
         content=clean_content
     )
 
     bot_msg = Message(
-        conversation_id=message.conversation_id,
+        conversation_id=convo.id,
         sender="bot",
         content=bleach.clean(bot_reply)
     )
 
     emotion_log = EmotionLog(
         user_id=user.id,
-        conversation_id=message.conversation_id,
+        conversation_id=convo.id,
         input_text=clean_content,
         detected_emotion=detected_emotion
     )
@@ -189,11 +173,34 @@ async def send_message(
     db_save_time = time.time() - db_prep_start
     print(f"⏱️  DB save operations: {db_save_time:.3f}s")
 
+    # Update session activity in state manager
+    session_update_start = time.time()
+
+    # The unified workflow already handles state management, so we just need to add to history
+    session_manager.add_message_to_history(
+        str(convo.id),
+        "assistant",
+        bot_reply,
+        {
+            "routing_decision": routing_decision,
+            "emotion_detected": detected_emotion,
+            "response_type": "stateful_pipeline",
+            "pipeline_result": pipeline_result
+        }
+    )
+    session_update_time = time.time() - session_update_start
+    print(f"⏱️  Session state update: {session_update_time:.3f}s")
+
     total_time = time.time() - pipeline_start
     print(f"🏁 Total pipeline time: {total_time:.3f}s")
     print(f"📊 Breakdown: DB({db_lookup_time + history_time + db_save_time:.3f}s) | LLM/Validation({total_time - (db_lookup_time + history_time + db_save_time):.3f}s)")
 
-    return bot_msg
+    return {
+        "id": bot_msg.uuid,
+        "sender": bot_msg.sender,
+        "content": bot_msg.content,
+        "timestamp": bot_msg.timestamp
+    }
 
 
 @router.get("/context", response_model=List[MessageOut])
@@ -222,111 +229,15 @@ def get_context_window(
         .all()
     )
 
-    return list(reversed(messages))  # return oldest → newest
-
-
-async def handle_crisis_query(query: str, validation_result: Dict[str, Any]) -> str:
-    """
-    Handle crisis queries with appropriate intervention.
-
-    Args:
-        query: The crisis query
-        validation_result: Validation results from LangGraph
-
-    Returns:
-        Crisis intervention response
-    """
-    crisis_severity = validation_result.get("crisis_severity", "medium")
-
-    if crisis_severity == "critical":
-        return (
-            "🚨 I detect this may be a crisis situation. Your safety is the highest priority.\n\n"
-            "Please reach out for immediate professional help:\n"
-            "• Emergency Services: 112\n"
-            "• Mental Health Helpline: 114 (24/7, free, confidential)\n"
-            "• Ndera Neuropsychiatric Hospital: +250 781 447 928\n\n"
-            "You don't have to face this alone. Professional crisis support is essential right now. "
-            "Please contact emergency services immediately."
-        )
-    else:
-        return (
-            "I'm concerned about what you're sharing. While this may not be an immediate crisis, "
-            "it's important to talk to a professional.\n\n"
-            "Available resources:\n"
-            "• Mental Health Helpline: 114\n"
-            "• Emergency Services: 112\n"
-            "• Local health centers in your area\n\n"
-            "Would you like me to help you connect with these services?"
-        )
-
-
-async def handle_random_question(query: str, validation_result: Dict[str, Any]) -> str:
-    """
-    Handle random questions with filtered responses.
-
-    Args:
-        query: The random question
-        validation_result: Validation results from LangGraph
-
-    Returns:
-        Filtered response for random questions
-    """
-    suggestions = validation_result.get("suggestions", [])
-
-    # Check if this is a technical/programming question
-    technical_keywords = [
-        'python', 'javascript', 'java', 'programming', 'coding', 'software',
-        'computer', 'install', 'setup', 'configuration', 'bug', 'error',
-        'debug', 'code', 'script', 'algorithm', 'function', 'variable',
-        'class', 'method', 'api', 'framework', 'library', 'package'
+    # Return messages with uuid instead of id
+    return [
+        {
+            "id": msg.uuid,
+            "sender": msg.sender,
+            "content": msg.content,
+            "timestamp": msg.timestamp
+        } for msg in reversed(messages)
     ]
 
-    is_technical = any(keyword in query.lower() for keyword in technical_keywords)
+    return list(reversed(messages))  # return oldest → newest
 
-    if is_technical:
-        return (
-            "I notice you're asking about a technical or programming topic. "
-            "While I'm here to support your mental health and emotional well-being, "
-            "I'm not designed to provide technical assistance or programming help.\n\n"
-            f"Your question: '{query}'\n\n"
-            "For technical questions, I recommend:\n"
-            "• Consulting official documentation\n"
-            "• Using search engines like Google\n"
-            "• Asking in programming communities (Stack Overflow, Reddit)\n"
-            "• Using AI assistants designed for coding\n\n"
-            "However, if this technical issue is causing you stress or affecting your mental health, "
-            "I'm here to help you cope with those feelings. Would you like to talk about how this is impacting you emotionally?"
-        )
-    else:
-        return (
-            "I understand you have a question, but I'm primarily designed to support mental health and emotional well-being. "
-            "While I can try to help with general questions, my expertise is in providing mental health support.\n\n"
-            f"Your question: '{query}'\n\n"
-            "If this is related to your mental health or emotional well-being, please let me know how I can support you. "
-            "For other topics, you might want to consult a general AI assistant or search engine.\n\n"
-            "Is there anything related to your mental health or well-being you'd like to discuss?"
-        )
-
-
-async def handle_unclear_query(query: str, validation_result: Dict[str, Any]) -> str:
-    """
-    Handle unclear queries by asking for clarification.
-
-    Args:
-        query: The unclear query
-        validation_result: Validation results from LangGraph
-
-    Returns:
-        Clarification request response
-    """
-    return (
-        "I'm not sure I understand your query. Could you please clarify what you'd like help with?\n\n"
-        "I'm here to support your mental health and emotional well-being. You can ask me about:\n"
-        "• How you're feeling emotionally\n"
-        "• Stress or anxiety you're experiencing\n"
-        "• Depression or mood concerns\n"
-        "• Relationship difficulties\n"
-        "• Work or school-related stress\n"
-        "• General mental health questions\n\n"
-        "What would be most helpful for you right now?"
-    )

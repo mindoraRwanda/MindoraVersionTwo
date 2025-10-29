@@ -1,18 +1,19 @@
-"""
-Database operations for the LLM service.
-"""
 from typing import List, Dict, Any, Optional
 from sqlalchemy.orm import Session
-from backend.app.db.database import get_db
-from backend.app.db.models import Message, Conversation
-from .llm_config import MAX_CONVERSATION_HISTORY, MIN_MEANINGFUL_MESSAGE_LENGTH, ERROR_MESSAGES
+from ..db.database import get_db
+from ..db.models import Message, Conversation
+# Use the compatibility layer for gradual migration
+from ..settings.settings import settings
 
 
 class DatabaseManager:
     """Manages database operations for conversations and messages."""
 
     @staticmethod
-    def fetch_recent_conversation(user_id: str, limit: int = MAX_CONVERSATION_HISTORY) -> List[Dict[str, str]]:
+    def fetch_recent_conversation(user_id: str, limit: Optional[int] = None) -> List[Dict[str, str]]:
+        # Use compatibility layer for configuration
+        if limit is None:
+            limit = settings.performance.max_conversation_history if settings.performance else 15
         """Fetch recent conversation history with enhanced context"""
         try:
             db: Session = next(get_db())
@@ -36,7 +37,8 @@ class DatabaseManager:
             # Filter out very short or system messages for better context quality
             meaningful_messages = []
             for msg in conversation_messages:
-                if len(msg["text"].strip()) >= MIN_MEANINGFUL_MESSAGE_LENGTH:
+                min_length = settings.performance.min_meaningful_message_length if settings.performance else 3
+                if len(msg["text"].strip()) >= min_length:
                     meaningful_messages.append({"role": msg["role"], "text": msg["text"]})
 
             return meaningful_messages

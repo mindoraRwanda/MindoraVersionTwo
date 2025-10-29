@@ -1,134 +1,240 @@
-import torch
-from sentence_transformers import SentenceTransformer, util
+import json
+import logging
+from typing import Dict, Any, Optional, List
+from backend.app.services.llm_providers import LLMProvider
+from backend.app.prompts.cultural_context_prompts import CulturalContextPrompts
 
-# Configure device for GPU usage
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-print(f"SentenceTransformer using device: {device}")
+logger = logging.getLogger(__name__)
 
-# Shared model cache to avoid loading multiple instances
-_model_cache = {}
-
-def get_emotion_model():
-    model_name = "BAAI/bge-small-en"
-    if model_name not in _model_cache:
-        print(f"Loading emotion model: {model_name}")
-        _model_cache[model_name] = SentenceTransformer(model_name, device=device)
-    return _model_cache[model_name]
-
-# Global model and embeddings
-model = None
-emotion_embeddings = None
-
-def initialize_emotion_classifier():
-    """Initializes the emotion classifier model and precomputes embeddings."""
-    global model, emotion_embeddings
+class LLMEmotionClassifier:
+    """LLM-powered emotion classifier with cultural context integration."""
     
-    if model is None:
-        model = get_emotion_model()
-        emotion_embeddings = {
-            label: model.encode(prompts, convert_to_tensor=True)
-            for label, prompts in emotion_examples.items()
+    def __init__(self, llm_provider: Optional[LLMProvider] = None):
+        """Initialize the LLM emotion classifier."""
+        self.llm_provider = llm_provider
+        self.cultural_prompts = CulturalContextPrompts()
+        # Language detection removed - default to English
+        logger.info("🧠 LLM Emotion Classifier initialized")
+    
+    def _detect_language(self, text: str) -> str:
+        """Detect language from text."""
+        # Language detection removed - default to English
+        return "en"
+    
+    def _get_cultural_context(self, language: str) -> Dict[str, Any]:
+        """Get cultural context for emotion detection."""
+        return {
+            "language": language,
+            "cultural_context": self.cultural_prompts.get_rwanda_cultural_context(language),
+            "emotion_responses": self.cultural_prompts.get_emotion_responses(language)
         }
-    return model
-
-# Emotion categories and example prompts
-emotion_examples = {
-    "sadness": [
-        "I feel like crying all the time.",
-        "Nothing makes me happy anymore.",
-        "I’m tired of everything.",
-        "I don’t see the point in anything.",
-        "I feel so low I can’t get out of bed."
-    ],
-    "anxiety": [
-        "I'm always overthinking everything.",
-        "I can't calm down, my mind won’t stop racing.",
-        "I’m scared something bad will happen.",
-        "I feel shaky and nervous all day.",
-        "I worry about everything, even small things."
-    ],
-    "stress": [
-        "I feel like I’m drowning in responsibilities.",
-        "I can't take any more pressure.",
-        "Everything is too much right now.",
-        "I feel burned out.",
-        "I’m overwhelmed and can’t focus."
-    ],
-    "fear": [
-        "I’m terrified for no reason.",
-        "I had a panic attack earlier.",
-        "I feel unsafe, even at home.",
-        "I’m afraid something is going to go wrong.",
-        "My heart races and I can’t breathe when I think about it."
-    ],
-    "anger": [
-        "I get irritated at everyone.",
-        "I feel like screaming sometimes.",
-        "Everything makes me so mad lately.",
-        "I can’t control my temper.",
-        "I feel like I’m going to explode."
-    ],
-    "guilt": [
-        "I hate myself for what I did.",
-        "I feel so ashamed.",
-        "I can’t forgive myself.",
-        "I’m a failure to everyone.",
-        "People would hate me if they knew the truth."
-    ],
-    "craving": [
-        "I really want to drink again.",
-        "I’m trying to quit but I can’t stop.",
-        "The urge to use is too strong.",
-        "I feel like I need something to cope.",
-        "I keep going back to old habits."
-    ],
-    "numbness": [
-        "I don’t feel anything anymore.",
-        "It’s like I’m empty inside.",
-        "I can’t care about anything.",
-        "Nothing matters to me now.",
-        "I just go through the motions."
-    ],
-    "joy": [
-        "Today actually felt okay.",
-        "I laughed and it felt good.",
-        "I feel lighter than usual.",
-        "Something good finally happened.",
-        "I think I’m starting to feel better."
-    ],
-    "neutral": [
-        "Hello",
-        "Hi",
-        "How are you?",
-        "Just checking in.",
-        "Hey there"
-        ]
-
-}
-
-def classify_emotion(user_input: str) -> str:
-    """Classifies the emotion of a given text input."""
-    global model, emotion_embeddings
     
-    if model is None or emotion_embeddings is None:
-        raise RuntimeError("Emotion classifier is not initialized. Call initialize_emotion_classifier() first.")
+    def _get_cultural_integration_prompt(self, language: str, gender: Optional[str] = None) -> str:
+        """Get cultural integration prompt for emotion detection."""
+        return self.cultural_prompts.get_cultural_integration_prompt(language, gender)
+    
+    async def classify_emotion(
+        self, 
+        text: str, 
+        user_gender: Optional[str] = None,
+        context: Optional[Dict[str, Any]] = None
+    ) -> Dict[str, Any]:
+        """
+        Classify emotion using LLM analysis with cultural context.
+        
+        Args:
+            text: Input text to analyze
+            user_gender: User's gender for cultural addressing
+            context: Additional context for analysis
+            
+        Returns:
+            Dictionary with emotion classification results
+        """
+        if not self.llm_provider:
+            logger.warning("No LLM provider available, returning neutral emotion")
+            return {
+                "emotion": "neutral",
+                "confidence": 0.0,
+                "reasoning": "No LLM provider available",
+                "keywords": [],
+                "cultural_context": {}
+            }
+        
+        try:
+            # Detect language
+            language = self._detect_language(text)
+            logger.info(f"🌍 Detected language: {language}")
+            
+            # Get cultural context
+            cultural_context = self._get_cultural_context(language)
+            cultural_prompt = self._get_cultural_integration_prompt(language, user_gender)
+            
+            # Build system prompt for emotion detection
+            system_prompt = f"""
+            You are an expert emotion detection specialist for youth mental health with cultural awareness for {language} speakers.
+            
+            {cultural_prompt}
+            
+            Analyze the text for emotions with cultural sensitivity:
+            1. Primary emotion and confidence score (0-1)
+            2. List of emotion keywords (including cultural expressions)
+            3. Detailed reasoning for emotion detection
+            4. Emotion intensity level (low, medium, high)
+            5. Cultural emotional expression patterns
+            6. Youth-specific emotional language indicators
+            7. Secondary emotions if present
+            
+            Consider that emotional expression varies across cultures. In Rwandan culture:
+            - Emotions may be expressed more indirectly
+            - Family and community context affects emotional expression
+            - Youth may use different emotional vocabulary
+            - Cultural stigma may influence how emotions are communicated
+            - Ubuntu philosophy emphasizes community and interconnectedness
+            
+            Available emotion response templates for {language}:
+            {cultural_context.get('emotion_responses', '')}
+            
+            Respond in JSON format:
+            {{
+                "emotions": {{"anxiety": 0.7, "worry": 0.3, "neutral": 0.1}},
+                "keywords": ["worried", "anxious", "cultural_expression"],
+                "reasoning": "Text shows anxiety and worry with cultural context consideration",
+                "selected_emotion": "anxiety",
+                "confidence": 0.7,
+                "intensity": "medium",
+                "cultural_emotional_indicators": ["indirect_expression", "family_context"],
+                "youth_emotional_patterns": ["peer_pressure", "academic_stress"],
+                "secondary_emotions": ["worry", "uncertainty"],
+                "cultural_appropriateness": "high"
+            }}
+            """
+            
+            user_prompt = f"""
+            Analyze the emotions in this text with cultural awareness:
+            
+            Text: "{text}"
+            Language: {language}
+            Gender Context: {user_gender if user_gender else "not specified"}
+            Additional Context: {context if context else "none"}
+            
+            Provide detailed emotion analysis with cultural sensitivity.
+            """
+            
+            logger.info(f"📝 Emotion classification prompt prepared (system: {len(system_prompt)} chars)")
+            
+            # Make LLM call
+            from langchain_core.messages import SystemMessage, HumanMessage
+            messages = [
+                SystemMessage(content=system_prompt),
+                HumanMessage(content=user_prompt)
+            ]
+            
+            response = await self.llm_provider.generate_response(messages)
+            logger.info(f"🤖 LLM response received: {len(response)} chars")
+            
+            # Parse response
+            result = self._parse_emotion_response(response, text, language)
+            logger.info(f"✅ Emotion classification completed: {result['selected_emotion']} (confidence: {result['confidence']:.2f})")
+            
+            return result
+            
+        except Exception as e:
+            logger.error(f"❌ Emotion classification failed: {e}")
+            return {
+                "emotion": "neutral",
+                "confidence": 0.0,
+                "reasoning": f"Error during emotion classification: {str(e)}",
+                "keywords": ["error", "fallback"],
+                "cultural_context": {"language": "en", "error": str(e)}
+            }
+    
+    def _parse_emotion_response(self, response: str, text: str, language: str) -> Dict[str, Any]:
+        """Parse LLM response into structured emotion classification result."""
+        try:
+            # Try to parse JSON response
+            data = json.loads(response)
+            
+            # Extract cultural elements
+            cultural_indicators = data.get("cultural_emotional_indicators", [])
+            youth_patterns = data.get("youth_emotional_patterns", [])
+            keywords = data.get("keywords", [])
+            secondary_emotions = data.get("secondary_emotions", [])
+            
+            # Combine all keywords
+            all_keywords = keywords + cultural_indicators + youth_patterns + secondary_emotions
+            
+            return {
+                "emotion": data.get("selected_emotion", "neutral"),
+                "confidence": float(data.get("confidence", 0.5)),
+                "reasoning": data.get("reasoning", "Emotion analysis completed with cultural context"),
+                "keywords": all_keywords,
+                "intensity": data.get("intensity", "medium"),
+                "emotions": data.get("emotions", {"neutral": 1.0}),
+                "cultural_context": {
+                    "language": language,
+                    "cultural_indicators": cultural_indicators,
+                    "youth_patterns": youth_patterns,
+                    "appropriateness": data.get("cultural_appropriateness", "medium")
+                }
+            }
+            
+        except (json.JSONDecodeError, ValueError, KeyError) as e:
+            logger.warning(f"Failed to parse LLM response: {e}")
+            # Fallback parsing
+            return {
+                "emotion": "neutral",
+                "confidence": 0.3,
+                "reasoning": "Fallback emotion classification due to parsing error",
+                "keywords": ["cultural_context", "fallback"],
+                "intensity": "low",
+                "emotions": {"neutral": 1.0},
+                "cultural_context": {
+                    "language": language,
+                    "error": "parsing_failed"
+                }
+            }
 
-    input_embedding = model.encode(user_input, convert_to_tensor=True)
+# Global LLM emotion classifier instance
+_llm_emotion_classifier = None
 
-    best_label = "neutral"
-    best_score = -1
+def initialize_emotion_classifier(llm_provider: Optional[LLMProvider] = None) -> LLMEmotionClassifier:
+    """Initialize the LLM emotion classifier."""
+    global _llm_emotion_classifier
+    if _llm_emotion_classifier is None:
+        _llm_emotion_classifier = LLMEmotionClassifier(llm_provider)
+        logger.info("🧠 LLM Emotion Classifier initialized globally")
+    return _llm_emotion_classifier
 
-    for label, embeddings in emotion_embeddings.items():
-        cosine_scores = util.cos_sim(input_embedding, embeddings)
-        avg_score = torch.mean(cosine_scores).item()
-
-        if avg_score > best_score:
-            best_score = avg_score
-            best_label = label
-
-    # Set a confidence threshold
-    threshold = 0.35
-    if best_score < threshold:
+# Backward compatibility function for simple emotion classification
+async def classify_emotion(user_input: str, user_gender: Optional[str] = None) -> str:
+    """
+    Classify emotion using LLM analysis (backward compatibility function).
+    
+    Args:
+        user_input: Text to analyze
+        user_gender: User's gender for cultural context
+        
+    Returns:
+        Primary emotion as string
+    """
+    global _llm_emotion_classifier
+    
+    if _llm_emotion_classifier is None:
+        logger.warning("LLM emotion classifier not initialized, returning neutral")
+        return "neutral"
+    
+    try:
+        result = await _llm_emotion_classifier.classify_emotion(user_input, user_gender)
+        return result.get("emotion", "neutral")
+    except Exception as e:
+        logger.error(f"Emotion classification failed: {e}")
         return "neutral"
 
-    return best_label
+# Synchronous wrapper for backward compatibility (fallback to neutral)
+def classify_emotion_sync(user_input: str) -> str:
+    """
+    Synchronous emotion classification (fallback function).
+    Returns neutral emotion for backward compatibility.
+    """
+    logger.warning("Using synchronous emotion classification fallback - returning neutral")
+    return "neutral"

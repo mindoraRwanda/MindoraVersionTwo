@@ -1,10 +1,11 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from typing import List
-from backend.app.auth.utils import get_current_user
-from backend.app.db.database import SessionLocal
-from backend.app.db.models import Conversation, Message, User, EmotionLog
-from backend.app.auth.schemas import ConversationOut
+from uuid import UUID
+from ..auth.utils import get_current_user
+from ..db.database import SessionLocal
+from ..db.models import Conversation, Message, User, EmotionLog
+from ..auth.schemas import ConversationOut
 
 router = APIRouter(prefix="/auth", tags=["Conversations"])
 
@@ -28,7 +29,10 @@ def create_conversation(
     db.add(new_convo)
     db.commit()
     db.refresh(new_convo)
-    return new_convo
+    return {
+        "id": new_convo.uuid,
+        "started_at": new_convo.started_at
+    }
 
 
 @router.get("/conversations")
@@ -40,11 +44,11 @@ def list_user_conversations(
     conversations = db.query(Conversation).filter_by(user_id=user.id).order_by(Conversation.started_at.desc()).all()
     return [
         {
-            "id": c.id,
+            "id": c.uuid,
             "started_at": c.started_at,
             "messages": [
                 {
-                    "id": msg.id,
+                    "id": msg.uuid,
                     "content": msg.content,
                     "sender": msg.sender,
                     "timestamp": msg.timestamp
@@ -56,25 +60,25 @@ def list_user_conversations(
 
 @router.get("/conversations/{conversation_id}/messages", response_model=List[dict])
 def get_conversation_messages(
-    conversation_id: int,
+    conversation_id: UUID,
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user)
 ):
     """Get all messages for a specific conversation."""
     conversation = db.query(Conversation)\
-        .filter_by(id=conversation_id, user_id=user.id).first()
+        .filter_by(uuid=conversation_id, user_id=user.id).first()
 
     if not conversation:
         raise HTTPException(status_code=404, detail="Conversation not found")
 
     messages = db.query(Message)\
-        .filter_by(conversation_id=conversation_id)\
+        .filter_by(conversation_id=conversation.id)\
         .order_by(Message.timestamp)\
         .all()
 
     return [
         {
-            "id": msg.id,
+            "id": msg.uuid,
             "content": msg.content,
             "sender": msg.sender,
             "timestamp": msg.timestamp
@@ -84,20 +88,20 @@ def get_conversation_messages(
 
 @router.delete("/conversations/{conversation_id}")
 def delete_conversation(
-    conversation_id: int,
+    conversation_id: UUID,
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user)
 ):
     """Delete a conversation and all its messages."""
     conversation = db.query(Conversation)\
-        .filter_by(id=conversation_id, user_id=user.id).first()
+        .filter_by(uuid=conversation_id, user_id=user.id).first()
 
     if not conversation:
         raise HTTPException(status_code=404, detail="Conversation not found")
 
     # Delete related emotion logs first to avoid foreign key constraint violation
     db.query(EmotionLog)\
-        .filter_by(conversation_id=conversation_id)\
+        .filter_by(conversation_id=conversation.id)\
         .delete()
 
     # Now delete the conversation (messages will be cascade deleted due to relationship config)

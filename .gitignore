@@ -80,4 +80,10 @@ temp/
 .env.test
 .env.production
 
+# OpenSpec project documentation
+openspec/
+
 COMPLETED_TASKS.md
+
+.cursor/
+AGENTS.md

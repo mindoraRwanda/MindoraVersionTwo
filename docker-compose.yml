@@ -10,7 +10,7 @@ services:
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: 12345
-      POSTGRES_DB: postgres
+      POSTGRES_DB: mindorab_db
     volumes:
       - postgres_data:/var/lib/postgresql/data
 
@@ -49,7 +49,7 @@ services:
       - postgres
       - qdrant
     environment:
-      DATABASE_URL: postgres://postgres:12345@postgres:5432/postgres
+      DATABASE_URL: postgres://postgres:12345@postgres:5432/mindora_db
 
   frontend:
     build: ./test-frontend

@@ -447,4 +447,81 @@
   .hamburger-btn {
     display: flex;
   }
+
+  .mic-btn {
+  width: 44px;
+  height: 44px;
+  margin-right: 8px;
+  border-radius: 10px;
+  border: 1px solid #ddd;
+  background: #fff;
+  cursor: pointer;
 }
+.mic-btn.recording {
+  background: #ffeaea;
+  border-color: #ffb3b3;
+}
+
+.voice-preview {
+  margin: 10px 8px 0 8px;
+  padding: 10px;
+  border: 1px solid #eee;
+  border-radius: 10px;
+  background: #fafafa;
+}
+.voice-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.voice-row .duration {
+  font-size: 12px;
+  color: #666;
+}
+.voice-actions {
+  margin-top: 8px;
+  display: flex;
+  gap: 8px;
+}
+.voice-actions .secondary {
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: #f3f3f3;
+  border: 1px solid #e5e5e5;
+}
+.voice-actions .primary {
+  padding: 6px 12px;
+  border-radius: 8px;
+  background: #6d28d9;
+  color: #fff;
+  border: none;
+}
+.stt-box {
+  margin-top: 8px;
+  padding: 8px;
+  background: #fff;
+  border: 1px dashed #ddd;
+  border-radius: 8px;
+}
+.stt-title {
+  font-size: 12px;
+  color: #555;
+  margin-bottom: 4px;
+}
+
+
+
+}
+
+/* NEw */
+.mic-btn {
+  width: 40px; height: 40px; border-radius: 8px;
+  margin-right: 8px; border: 1px solid #ddd; background: #fff;
+}
+.mic-btn.recording { background: #ffefef; border-color: #ff7a7a; }
+
+.input-stack { display: flex; flex: 1; align-items: center; }
+.audio-preview { display: flex; align-items: center; gap: 10px; width: 100%; }
+.audio-actions { display: flex; gap: 8px; }
+.send-voice-btn { background: #4f46e5; color: #fff; border: none; padding: 6px 10px; border-radius: 6px; }
+.discard-voice-btn { background: #f3f4f6; border: 1px solid #e5e7eb; padding: 6px 10px; border-radius: 6px; }

@@ -3,7 +3,8 @@ import requests
 from googlesearch import search
 
 # Target folder to save the PDFs
-save_path = "C:/Users/STUDENT/Documents/MentalHealthChatbot" 
+save_path = "C:/Users/STUDENT/Documents/MentalHealthChatbot"
+
 os.makedirs(save_path, exist_ok=True)
 
 # List of search queries to automate

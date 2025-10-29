@@ -120,6 +120,7 @@ class ChatOpenAIProvider(LLMProvider):
 
     def __init__(self, model_name: str, api_key: Optional[str] = None, **kwargs):
         super().__init__(model_name, **kwargs)
+        #self.api_key = api_key or os.getenv("OPENAI_API_KEY")
         self.api_key = api_key or os.getenv("OPENAI_API_KEY")
         self._chat_model = None
 
@@ -159,7 +160,9 @@ class ChatGroqProvider(LLMProvider):
 
     def __init__(self, model_name: str, api_key: Optional[str] = None, **kwargs):
         super().__init__(model_name, **kwargs)
-        self.api_key = api_key or os.getenv("GROQ_API_KEY")
+        # ✅ read from arg or env
+        self.api_key = (api_key or os.getenv("GROQ_API_KEY") or "").strip()
+        #self.api_key ="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".strip()
         self._chat_model = None
 
     @property
@@ -168,7 +171,7 @@ class ChatGroqProvider(LLMProvider):
 
     def is_available(self) -> bool:
         """Check if Groq API key is configured."""
-        return bool(self.api_key and self.api_key.strip())
+        return bool(self.api_key)
 
     async def generate_response(self, messages: List[Any]) -> str:
         """Generate response using Groq."""
@@ -177,6 +180,13 @@ class ChatGroqProvider(LLMProvider):
                 from langchain_groq import ChatGroq
                 if not self.api_key:
                     raise RuntimeError("Groq API key not configured. Set GROQ_API_KEY environment variable.")
+<<<<<<< HEAD
+                self._chat_model = ChatGroq(
+                    model=self.model_name,
+                    api_key=self.api_key,   # ✅ use the resolved key, do NOT hardcode
+                    temperature=0.9,
+                    **self.kwargs
+=======
 
                 # Use the compatibility layer for gradual migration
                 model_temperature = settings.model.temperature if settings.model else 1.0
@@ -185,6 +195,7 @@ class ChatGroqProvider(LLMProvider):
                     api_key=self.api_key,
                     temperature=model_temperature,
                     **{k: v for k, v in self.kwargs.items() if k not in ['api_key']}
+>>>>>>> origin/main
                 )
             except ImportError:
                 raise RuntimeError("langchain_groq not installed. Install with: pip install langchain_groq")
@@ -340,6 +351,7 @@ class ChatHuggingFaceProvider(LLMProvider):
             raise RuntimeError(f"Model generation timed out for {self.model_path}. The model may be overloaded or the request too complex.")
         except Exception as e:
             raise RuntimeError(f"Error generating response with HuggingFace model {self.model_path}: {e}")
+
 
 
 class LLMProviderFactory:

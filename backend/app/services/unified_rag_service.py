@@ -1,3 +1,4 @@
+# backend/app/services/unified_rag_service.py
 """
 Unified RAG Service - Consolidates document processing and retrieval functionality.
 Combines the best features of RAGService and RetrieverService into a single, efficient service.

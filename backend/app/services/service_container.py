@@ -1,3 +1,4 @@
+#  backend/app/services/service_container.py
 """
 Global Service Container for centralized service initialization and management.
 
@@ -29,7 +30,7 @@ from .unified_rag_service import UnifiedRAGService, create_unified_rag_service
 from .stateful_pipeline import StatefulMentalHealthPipeline
 from .llm_cultural_context import RwandaCulturalManager, ResponseApproachManager, ConversationContextManager
 from .llm_safety import SafetyManager
-from .crisis_alert_service import CrisisAlertService
+from .crisis_alert_service_temporary import CrisisAlertService
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)

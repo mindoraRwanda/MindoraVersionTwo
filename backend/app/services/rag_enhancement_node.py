@@ -1,3 +1,4 @@
+ # backend/app/services/rag_enhancement_node.py
 """
 RAG Enhancement Node for Stateful Pipeline
 Enhances responses with retrieved knowledge from the vector database.

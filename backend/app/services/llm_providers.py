@@ -95,6 +95,7 @@ class ChatOpenAIProvider(LLMProvider):
 
     def __init__(self, model_name: str, api_key: Optional[str] = None, **kwargs):
         super().__init__(model_name, **kwargs)
+        #self.api_key = api_key or os.getenv("OPENAI_API_KEY")
         self.api_key = api_key or os.getenv("OPENAI_API_KEY")
         self._chat_model = None
 
@@ -132,7 +133,9 @@ class ChatGroqProvider(LLMProvider):
 
     def __init__(self, model_name: str, api_key: Optional[str] = None, **kwargs):
         super().__init__(model_name, **kwargs)
-        self.api_key = api_key or os.getenv("GROQ_API_KEY")
+        # ✅ read from arg or env
+        self.api_key = (api_key or os.getenv("GROQ_API_KEY") or "").strip()
+        #self.api_key ="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".strip()
         self._chat_model = None
 
     @property
@@ -141,7 +144,7 @@ class ChatGroqProvider(LLMProvider):
 
     def is_available(self) -> bool:
         """Check if Groq API key is configured."""
-        return bool(self.api_key and self.api_key.strip())
+        return bool(self.api_key)
 
     async def generate_response(self, messages: List[Any]) -> str:
         """Generate response using Groq."""
@@ -150,10 +153,9 @@ class ChatGroqProvider(LLMProvider):
                 from langchain_groq import ChatGroq
                 if not self.api_key:
                     raise RuntimeError("Groq API key not configured. Set GROQ_API_KEY environment variable.")
-
                 self._chat_model = ChatGroq(
                     model=self.model_name,
-                    api_key=self.api_key,
+                    api_key=self.api_key,   # ✅ use the resolved key, do NOT hardcode
                     temperature=0.9,
                     **self.kwargs
                 )
@@ -162,6 +164,7 @@ class ChatGroqProvider(LLMProvider):
 
         response = await self._chat_model.ainvoke(messages)
         return response.content.strip()
+
 
 
 class LLMProviderFactory:

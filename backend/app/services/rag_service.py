@@ -15,7 +15,8 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 logger = logging.getLogger(__name__)
 
 # Configuration
-PDF_FOLDER = Path(r"C:\Users\STUDENT\OneDrive\Desktop\CMU Essentials 2024-2026\Fall 2025 Courses\Capstone Project\mindora-conv-therapy-module\backend\datasources")
+PDF_FOLDER = Path(r"C:\Users\STUDENT\OneDrive\Desktop\CMU Essentials 2024-2026\Fall 2025 Courses\Capstone Project\Version_TWo\MindoraVersionTwo\backend\datasources")
+
 COLLECTION_NAME = "therapy_knowledge_base"
 BATCH_SIZE = 16  # Process embeddings in smaller batches
 MAX_CHUNKS_PER_FILE = 1000  # Limit chunks for very large files

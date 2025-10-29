@@ -1,18 +1,11 @@
-"""
-Refactored LLM Service - Main orchestrator for mental health chatbot.
-
-This module provides a clean, maintainable interface for LLM operations
-while delegating specific responsibilities to focused modules.
-"""
+import os
 import time
 from typing import Dict, List, Any, Optional
-from langchain.schema import HumanMessage, SystemMessage
+from langchain_core.messages import HumanMessage, SystemMessage
 
-from .llm_config import (
-    MAX_INPUT_LENGTH, RAG_TOP_K, FALLBACK_RESPONSE,
-    ERROR_MESSAGES
-)
-from .llm_safety import SafetyManager, GuardrailsManager
+from ..settings.settings import settings
+from ..prompts.system_prompts import SystemPrompts
+from .llm_safety import SafetyManager
 from .llm_cultural_context import (
     RwandaCulturalManager,
     ResponseApproachManager,
@@ -20,9 +13,8 @@ from .llm_cultural_context import (
 )
 from .llm_providers import LLMProviderFactory, create_llm_provider
 from .llm_database_operations import DatabaseManager
-from .retriever_service import RetrieverService
-from .emotion_classifier import classify_emotion
-from .chatbot_insights_pipeline import detect_medication_mentions, detect_suicide_risk
+from .unified_rag_service import UnifiedRAGService
+# Legacy emotion_classifier import removed - using stateful pipeline instead
 
 
 class LLMService:
@@ -35,15 +27,16 @@ class LLMService:
 
     def __init__(self, model_name: Optional[str] = None, provider_name: Optional[str] = None, use_vllm: bool = False):
         """Initialize the LLM service components (lightweight constructor)."""
-        # Store configuration
-        self.model_name = model_name or "HuggingFaceTB/SmolLM3-3B"
+        # Store configuration - use settings model name if available
+        default_model = settings.model.model_name if settings.model else "gemma3:1b"
+        self.model_name = model_name or default_model
         self.provider_name = provider_name
         self.use_vllm = use_vllm
 
         # Initialize components (but don't start them yet)
         self.llm_provider =  None
-        self.retriever = RetrieverService()
-        self.guardrails_manager = None
+        self.rag_service = None  # Will be injected via service container
+
 
         # Status flags
         self._is_initialized = False
@@ -89,15 +82,13 @@ class LLMService:
         sanitized_message = SafetyManager.sanitize_input(user_message)
         print(f"    🧹 LLM: Input sanitized ({len(user_message)} -> {len(sanitized_message)} chars)")
 
-        # Apply guardrails first
-        if self.guardrails_manager:
-            guardrails_start = time.time()
-            guardrails_response = await self.guardrails_manager.check_guardrails(sanitized_message)
-            guardrails_time = time.time() - guardrails_start
-            print(f"    🛡️  LLM: Guardrails check: {guardrails_time:.3f}s")
+        # Apply safety checks first
+        safety_response = SafetyManager.check_safety(sanitized_message)
+        if safety_response:
+            print(f"    🛡️  Safety: Blocked message - returning safety response")
+            return safety_response
 
-            if guardrails_response:
-                return guardrails_response
+        print(f"    🛡️  Safety: Message approved")
 
         # Use sanitized message for processing
         user_message = sanitized_message
@@ -128,9 +119,9 @@ class LLMService:
             emotion, user_message, []
         )
 
-        # Build system prompt
+        # Build system prompt (language detection not available in LLM service, default to English)
         system_prompt = ResponseApproachManager.build_system_prompt(
-            context_parts, emotion, response_approach
+            context_parts, emotion, response_approach, language='en'
         )
 
         # Generate response
@@ -141,7 +132,7 @@ class LLMService:
 
         # Apply safety filtering
         if not SafetyManager.is_safe_output(response):
-            response = FALLBACK_RESPONSE
+            response = SystemPrompts.get_fallback_response()
 
         total_time = time.time() - pipeline_start
         print(f"🏁 Fast path total time: {total_time:.3f}s")
@@ -161,22 +152,16 @@ class LLMService:
         # Analysis pipeline
         analysis_start = time.time()
 
-        # Use emotion data from LangGraph if provided, otherwise detect locally
+        # Use emotion data from stateful pipeline (primary source)
         if emotion_data:
             emotion = emotion_data.get("detected_emotion", "neutral")
-            print(f"    🎭 LLM: Using emotion data from LangGraph: {emotion}")
+            print(f"    🎭 LLM: Using emotion data from stateful pipeline: {emotion}")
         else:
-            # Try to classify emotion locally, fallback to neutral if not available
-            try:
-                emotion = classify_emotion(user_message)
-                print(f"    🎭 LLM: Local emotion classification: {emotion}")
-            except RuntimeError:
-                # Emotion classifier not initialized, use neutral as fallback
-                emotion = "neutral"
-                print(f"    🎭 LLM: Emotion classifier not available, using neutral")
+            # Default to neutral - stateful pipeline should always provide emotion data
+            emotion = "neutral"
+            print(f"    🎭 LLM: No emotion data from pipeline, using neutral")
 
-        suicide_flag = detect_suicide_risk(user_message)
-        meds_mentioned = detect_medication_mentions(user_message)
+        # Legacy analysis pipeline removed - using stateful pipeline instead
         analysis_time = time.time() - analysis_start
         print(f"    📊 LLM: Analysis pipeline: {analysis_time:.3f}s")
 
@@ -185,12 +170,17 @@ class LLMService:
         if not ConversationContextManager.is_simple_greeting(user_message):
             rag_start = time.time()
             try:
-                retrieved_chunks = self.retriever.search(query=user_message, top_k=RAG_TOP_K)
-                retrieved_text = "\n\n".join(
-                    chunk for chunk in retrieved_chunks if isinstance(chunk, str)
-                ) if retrieved_chunks else ""
-                rag_time = time.time() - rag_start
-                print(f"    🔍 LLM: RAG search: {rag_time:.3f}s ({len(retrieved_chunks)} chunks)")
+                if self.rag_service:
+                    rag_top_k = settings.performance.rag_top_k if settings.performance else 3
+                    retrieved_results = self.rag_service.search(query=user_message, top_k=rag_top_k)
+                    retrieved_text = "\n\n".join(
+                        result.get("text", "") for result in retrieved_results if result.get("text")
+                    )
+                    rag_time = time.time() - rag_start
+                    print(f"    🔍 LLM: RAG search: {rag_time:.3f}s ({len(retrieved_results)} chunks)")
+                else:
+                    retrieved_text = ""
+                    print("    ⚠️ LLM: RAG service not available")
             except Exception as e:
                 print(f"    ❌ LLM: RAG Error: {e}")
                 retrieved_text = ""
@@ -224,9 +214,9 @@ class LLMService:
         if retrieved_text:
             context_parts.append(f"Relevant knowledge: {retrieved_text[:500]}")
 
-        # Build system prompt
+        # Build system prompt (language defaults to English for fast path)
         system_prompt = ResponseApproachManager.build_system_prompt(
-            context_parts, emotion, response_approach
+            context_parts, emotion, response_approach, language='en'
         )
 
         # Generate response
@@ -244,7 +234,7 @@ class LLMService:
         # Apply safety filtering
         if not SafetyManager.is_safe_output(response):
             print("    ⚠️  LLM: Unsafe output detected, using fallback response")
-            response = FALLBACK_RESPONSE
+            response = SystemPrompts.get_fallback_response()
 
         total_time = time.time() - pipeline_start
         print(f"🏁 Full analysis total time: {total_time:.3f}s")
@@ -295,36 +285,25 @@ class LLMService:
                 print(f"❌ {self._initialization_error}")
                 return False
 
-            # Initialize guardrails if provider is ready
+            # Safety system is always available (no initialization needed)
             if self.llm_provider.is_available():
-                try:
-                    # Get the underlying chat model from the provider for guardrails
-                    # We need to access the internal chat_model attribute
-                    chat_model = getattr(self.llm_provider, '_chat_model', None)
-                    if chat_model:
-                        self.guardrails_manager = GuardrailsManager(chat_model)
-                        print("✅ Guardrails initialized successfully")
-                    else:
-                        print("⚠️  Guardrails skipped - no chat model available yet")
-                except Exception as e:
-                    self._initialization_error = f"Failed to initialize guardrails: {e}"
-                    print(f"⚠️  {self._initialization_error}")
-                    # Continue without guardrails if they fail
+                print("✅ Safety system ready (no external dependencies)")
             else:
                 self._initialization_error = "Provider not available - will use fallback responses"
                 print(f"⚠️  {self._initialization_error}")
                 print(f"   Model '{self.model_name}' not found or server not running")
 
-            # Test retriever connection
-            try:
-                # Simple test to ensure retriever can connect
-                test_query = "test"
-                self.retriever.search(test_query, top_k=1)
-                print("✅ Vector retriever initialized successfully")
-            except Exception as e:
-                self._initialization_error = f"Failed to initialize vector retriever: {e}"
-                print(f"⚠️  {self._initialization_error}")
-                # Continue without RAG if it fails
+            # Test RAG service connection
+            if self.rag_service:
+                try:
+                    # Simple test to ensure RAG service can connect
+                    test_query = "test"
+                    self.rag_service.search(test_query, top_k=1)
+                    print("✅ RAG service initialized successfully")
+                except Exception as e:
+                    self._initialization_error = f"Failed to initialize RAG service: {e}"
+                    print(f"⚠️  {self._initialization_error}")
+                    # Continue without RAG if it fails
 
             self._is_initialized = True
             print("✅ LLM Service initialization completed")
@@ -340,6 +319,11 @@ class LLMService:
     def is_initialized(self) -> bool:
         """Check if the service is properly initialized."""
         return getattr(self, '_is_initialized', False)
+    
+    def set_rag_service(self, rag_service: UnifiedRAGService):
+        """Inject RAG service into LLM service."""
+        self.rag_service = rag_service
+        print("🔍 RAG service injected into LLM service")
 
     @property
     def initialization_error(self) -> Optional[str]:

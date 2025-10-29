@@ -1,64 +1,16 @@
 """
 Unit tests for the Query Validator service.
 
-This module contains unit tests for both the original keyword-based
-and the new LangGraph-based query validators.
+This module contains unit tests for the LangGraph-based query validators.
 """
 
 import pytest
 from unittest.mock import Mock, AsyncMock, patch
 from datetime import datetime
 
-from backend.app.services.query_validator import QueryValidatorService, QueryType
 from backend.app.services.query_validator_langgraph import LangGraphQueryValidator
+from backend.app.services.langgraph_state import QueryType
 from tests import TestUtils, TestFixtures
-
-
-class TestQueryValidatorService:
-    """Tests for the original keyword-based QueryValidatorService."""
-
-    @pytest.fixture
-    def validator(self):
-        """Create a QueryValidatorService instance."""
-        return QueryValidatorService()
-
-    def test_validate_mental_support_query(self, validator):
-        """Test validation of mental support queries."""
-        result = validator.validate_query("I'm feeling really anxious today")
-
-        assert result.query_type == QueryType.MENTAL_SUPPORT
-        assert result.confidence > 0.8
-        assert "anxious" in result.keywords_found
-
-    def test_validate_random_question(self, validator):
-        """Test validation of random questions."""
-        result = validator.validate_query("What's the weather like today?")
-
-        assert result.query_type == QueryType.RANDOM_QUESTION
-        assert result.confidence > 0.7
-        assert "weather" in result.keywords_found
-
-    def test_validate_empty_query(self, validator):
-        """Test validation of empty queries."""
-        result = validator.validate_query("")
-
-        assert result.query_type == QueryType.UNCLEAR
-        assert result.needs_clarification
-
-    def test_crisis_detection(self, validator):
-        """Test crisis detection functionality."""
-        is_crisis, confidence = validator.is_crisis_query("I want to kill myself")
-
-        assert is_crisis
-        assert confidence > 0.8
-
-    def test_get_query_suggestions(self, validator):
-        """Test query suggestion generation."""
-        result = validator.validate_query("I'm feeling depressed")
-        suggestions = validator.get_query_suggestions(result)
-
-        assert len(suggestions) > 0
-        assert any("mental health" in s.lower() for s in suggestions)
 
 
 class TestLangGraphQueryValidator:

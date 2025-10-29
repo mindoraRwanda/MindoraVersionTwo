@@ -44,6 +44,7 @@ class SessionState:
     conversation_history: List[Dict[str, Any]]
     crisis_flags: List[str]
     crisis_severity: CrisisSeverity
+    language_preference: str  # Language code (en, rw, fr, sw)
     created_at: datetime
     updated_at: datetime
     last_activity: datetime
@@ -71,6 +72,7 @@ class SessionState:
             conversation_history=data.get('conversation_history', []),
             crisis_flags=data.get('crisis_flags', []),
             crisis_severity=CrisisSeverity(data.get('crisis_severity', 'low')),
+            language_preference=data.get('language_preference', 'en'),
             created_at=datetime.fromisoformat(data['created_at']),
             updated_at=datetime.fromisoformat(data['updated_at']),
             last_activity=datetime.fromisoformat(data['last_activity']),
@@ -143,7 +145,7 @@ class SessionStateManager:
                 print(f"Error in session cleanup: {e}")
                 await asyncio.sleep(60)
 
-    def create_session(self, user_id: str, initial_state: ConversationState = ConversationState.INITIAL_DISTRESS) -> str:
+    def create_session(self, user_id: str, initial_state: ConversationState = ConversationState.INITIAL_DISTRESS, language_preference: str = 'en') -> str:
         """Create a new conversation session"""
         session_id = str(uuid.uuid4())
 
@@ -155,6 +157,7 @@ class SessionStateManager:
             conversation_history=[],
             crisis_flags=[],
             crisis_severity=CrisisSeverity.LOW,
+            language_preference=language_preference,
             created_at=datetime.now(),
             updated_at=datetime.now(),
             last_activity=datetime.now()
@@ -163,7 +166,7 @@ class SessionStateManager:
         self._sessions[session_id] = session
         return session_id
 
-    def create_session_with_id(self, session_id: str, user_id: str, initial_state: ConversationState = ConversationState.INITIAL_DISTRESS) -> str:
+    def create_session_with_id(self, session_id: str, user_id: str, initial_state: ConversationState = ConversationState.INITIAL_DISTRESS, language_preference: str = 'en') -> str:
         """Create a new conversation session with a specific session_id"""
         # Check if session already exists
         if session_id in self._sessions:
@@ -179,6 +182,7 @@ class SessionStateManager:
             conversation_history=[],
             crisis_flags=[],
             crisis_severity=CrisisSeverity.LOW,
+            language_preference=language_preference,
             created_at=datetime.now(),
             updated_at=datetime.now(),
             last_activity=datetime.now()
@@ -206,6 +210,16 @@ class SessionStateManager:
         session.current_state = new_state
         if state_data:
             session.state_data.update(state_data)
+        session.update_activity()
+        return True
+
+    def update_session_language(self, session_id: str, language_preference: str) -> bool:
+        """Update session language preference"""
+        session = self.get_session(session_id)
+        if not session:
+            return False
+
+        session.language_preference = language_preference
         session.update_activity()
         return True
 

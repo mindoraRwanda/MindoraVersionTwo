@@ -1,23 +1,19 @@
-"""
-Model management and initialization for LLM service.
-"""
 import requests
 from typing import Optional
 from langchain_ollama import ChatOllama
-from .llm_config import (
-    DEFAULT_MODEL_NAME, OLLAMA_BASE_URL, VLLM_BASE_URL,
-    ERROR_MESSAGES
-)
+# Use the compatibility layer for gradual migration
+from backend.app.settings.settings import settings
+from backend.app.prompts.system_prompts import SystemPrompts
 
 
 class ModelManager:
     """Manages LLM model initialization and health checks."""
 
-    def __init__(self, model_name: str = None, use_vllm: bool = False):
-        self.model_name = model_name or DEFAULT_MODEL_NAME
+    def __init__(self, model_name: Optional[str] = None, use_vllm: bool = False):
+        self.model_name = model_name or (settings.model.model_name if settings.model else "gemma3:1b")
         self.use_vllm = use_vllm
-        self.ollama_base_url = OLLAMA_BASE_URL
-        self.vllm_base_url = VLLM_BASE_URL
+        self.ollama_base_url = settings.model.ollama_base_url if settings.model else "http://127.0.0.1:11434"
+        self.vllm_base_url = settings.model.vllm_base_url if settings.model else "http://127.0.0.1:8001/v1"
         self.chat_model = None
         self.is_initialized = False
 
@@ -35,14 +31,14 @@ class ModelManager:
     def _initialize_vllm_model(self) -> bool:
         """Initialize vLLM model"""
         if not self._is_vllm_running():
-            print(ERROR_MESSAGES["vllm_not_running"])
+            print(SystemPrompts.get_error_messages()["vllm_not_running"])
             return False
 
         try:
             self.chat_model = ChatOllama(
                 base_url=self.vllm_base_url,
                 model=self.model_name,
-                temperature=0.85
+                temperature=settings.model.temperature if settings.model else 0.85
             )
             self.is_initialized = True
             print("LLM initialized with vLLM (Llama-3-8B-Instruct)")
@@ -54,18 +50,18 @@ class ModelManager:
     def _initialize_ollama_model(self) -> bool:
         """Initialize Ollama model"""
         if not self._is_ollama_running():
-            print(ERROR_MESSAGES["ollama_not_running"])
+            print(SystemPrompts.get_error_messages()["ollama_not_running"])
             return False
 
         if not self._is_model_available():
-            print(ERROR_MESSAGES["model_not_available"].format(model_name=self.model_name))
+            print(SystemPrompts.get_error_messages()["model_not_available"].format(model_name=self.model_name))
             return False
 
         try:
             self.chat_model = ChatOllama(
                 base_url=self.ollama_base_url,
                 model=self.model_name,
-                temperature=0.85
+                temperature=settings.model.temperature if settings.model else 0.85
             )
             self.is_initialized = True
             print(f"LLM initialized with Ollama model: {self.model_name}")
@@ -106,7 +102,19 @@ class ModelManager:
     async def generate_response(self, messages) -> str:
         """Generate response using the initialized model"""
         if not self.is_initialized or not self.chat_model:
-            return ERROR_MESSAGES["model_not_initialized"]
+            return SystemPrompts.get_error_messages()["model_not_initialized"]
 
         response = await self.chat_model.ainvoke(messages)
-        return response.content.strip()
+        content = response.content
+        if isinstance(content, str):
+            return content.strip()
+        elif isinstance(content, list) and content:
+            # Assuming it's a list of dicts with 'text' key, or just strings
+            first_item = content
+            if isinstance(first_item, dict) and 'text' in first_item:
+                text_content = first_item.get('text')
+                if isinstance(text_content, str):
+                    return text_content.strip()
+            elif isinstance(first_item, str):
+                return first_item.strip()
+        return str(content).strip() # Fallback to string conversion

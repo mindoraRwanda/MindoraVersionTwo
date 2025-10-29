@@ -11,7 +11,7 @@ A comprehensive mental health support platform designed for Rwandan youth, featu
 - **Natural Conversational Responses**: AI speaks like a culturally aware Rwandan brother/sister rather than a clinical assistant
 - **Advanced RAG System**: ChromaDB/Qdrant vector database with intelligent document retrieval
 - **Emotion Detection**: Real-time emotion classification with gender-aware response adaptation
-- **Safety & Ethics**: Comprehensive guardrails, crisis detection, and content filtering
+- **Safety & Ethics**: Comprehensive safety checks, crisis detection, and content filtering
 - **Modern Architecture**: FastAPI backend with React frontend, PostgreSQL database
 - **LangGraph Integration**: Advanced query validation and conversation flow management
 - **Comprehensive Testing**: Unit and integration tests with CI/CD pipeline
@@ -59,7 +59,7 @@ docker-compose up --build -d
 
 - **Frontend**: [http://localhost:3000](http://localhost:3000)
 - **Backend API**: [http://localhost:8000](http://localhost:8000)
-- **API Documentation**: [http://localhost:8000/docs](http://localhost:8000/docs)
+- **API Documentation**: [http://localhost:8000/docs](http://localhost:8000)
 - **Qdrant Dashboard**: [http://localhost:6333/dashboard](http://localhost:6333/dashboard)
 
 ### Step 4: Configure LLM Provider (Optional)
@@ -90,7 +90,9 @@ pip install langchain-community qdrant-client chromadb
 # Install HuggingFace support (optional)
 pip install transformers torch accelerate
 
-# Set up environment variables
+# Set up environment variables using the new FastAPI settings system
+# The system automatically loads environment-specific configuration from .env files
+# Copy the appropriate environment file:
 cp .env.example .env
 # Edit .env with your API keys and configuration
 
@@ -150,14 +152,9 @@ python -m backend.app.services.rag_service
 
 ### Core Endpoints
 
-#### Chat
-- **POST** `/chat` - Send message and get AI response
-- **GET** `/chat/history/{conversation_id}` - Get conversation history
-
 #### Authentication
-- **POST** `/auth/register` - User registration
-- **POST** `/auth/login` - User login
-- **POST** `/auth/logout` - User logout
+- **POST** `/signup` - User registration
+- **POST** `/login` - User login
 
 #### Conversations
 - **GET** `/conversations` - List user conversations
@@ -165,18 +162,21 @@ python -m backend.app.services.rag_service
 - **DELETE** `/conversations/{id}` - Delete conversation
 
 #### Messages
-- **GET** `/messages/{conversation_id}` - Get messages in conversation
+- **GET** `/conversations/{conversation_id}/messages` - Get messages in conversation
 - **POST** `/messages` - Send message
+- **GET** `/context` - Get context window
 
 #### Mental Health Insights
-- **GET** `/insights/emotion` - Get emotion analysis
-- **GET** `/insights/crisis-resources` - Get Rwanda crisis resources
-- **GET** `/insights/cultural-context` - Get cultural context information
+- **POST** `/emotion` - Detect emotion in text
+- **POST** `/analyze` - Analyze user message
+- **POST** `/detect/medications` - Extract medications from text
+- **POST** `/detect/suicide-risk` - Check suicide risk flags
+- **POST** `/reindex` - Rebuild vector knowledge base
 
 ### Example Request
 
 ```bash
-curl -X POST "http://localhost:8000/chat" \
+curl -X POST "http://localhost:8000/messages" \
   -H "Content-Type: application/json" \
   -d '{
     "message": "What does Rwanda'\''s mental health policy say about community-based care?",
@@ -201,20 +201,28 @@ curl -X POST "http://localhost:8000/chat" \
 
 ### Backend Architecture
 
-The backend follows a modular architecture with clear separation of concerns:
+The backend follows a modular architecture with clear separation of concerns and a comprehensive FastAPI settings system:
 
 ```
 backend/
 ├── __init__.py                    # Backend package initialization
 ├── main.py                        # FastAPI application entry point
 ├── Dockerfile                     # Container configuration
-├── Scrap.py                       # Web scraping utilities
-├── test_*.py                      # Standalone test files
-├── .benchmarks/                   # Performance benchmarking data
-├── .pytest_cache/                 # Pytest cache directory
 ├── app/                           # Main application package
 │   ├── __init__.py               # App package initialization
 │   ├── main.py                   # FastAPI app instance & routes
+│   ├── settings/                 # FastAPI settings system (NEW)
+│   │   ├── __init__.py          # Settings entry point
+│   │   ├── base.py              # Base settings class
+│   │   ├── settings.py          # Main settings aggregation
+│   │   ├── model.py             # LLM model configuration
+│   │   ├── performance.py       # Performance settings
+│   │   ├── safety.py            # Safety and content filtering
+│   │   ├── cultural.py          # Rwanda-specific cultural context
+│   │   ├── database.py          # Database configuration
+│   │   ├── emotional.py         # Emotional response settings
+│   │   ├── qdrant.py            # Qdrant vector database settings
+│   │   └── .env.*               # Environment-specific configuration files
 │   ├── auth/                     # Authentication system
 │   │   ├── __init__.py
 │   │   ├── auth_router.py        # Authentication endpoints
@@ -236,26 +244,26 @@ backend/
 │   │   └── system_prompts.py
 │   ├── routers/                  # API route handlers
 │   │   ├── __init__.py
-│   │   ├── chat_router.py        # Chat functionality
 │   │   ├── conversations_router.py
 │   │   └── messages_router.py
 │   ├── services/                 # Business logic layer
 │   │   ├── __init__.py
-│   │   ├── chatbot_insights_pipeline.py  # Crisis detection
-│   │   ├── emotion_classifier.py         # Emotion analysis
-│   │   ├── langgraph_state.py            # LangGraph state management
-│   │   ├── llm_config.py                 # LLM configuration
-│   │   ├── llm_cultural_context.py       # Cultural context handling
-│   │   ├── llm_database_operations.py    # DB operations
-│   │   ├── llm_model_manager.py          # Model management
-│   │   ├── llm_providers.py              # Multi-provider support
-│   │   ├── llm_safety.py                 # Safety guardrails
-│   │   ├── llm_service_refactored.py     # Main LLM orchestrator
-│   │   ├── query_validator_langgraph.py  # LangGraph validation
-│   │   ├── query_validator.py            # Query validation
-│   │   ├── rag_service.py                # RAG implementation
-│   │   ├── retriever_service.py          # Document retrieval
-│   │   └── mental_health_knowledge/      # Vector DB storage
+│   │   ├── crisis_alert_service.py
+│   │   ├── emotion_classifier.py
+│   │   ├── llm_cultural_context.py
+│   │   ├── llm_database_operations.py
+│   │   ├── llm_model_manager.py
+│   │   ├── llm_providers.py
+│   │   ├── llm_safety.py
+│   │   ├── llm_service.py
+│   │   ├── pipeline_nodes.py
+│   │   ├── pipeline_state.py
+│   │   ├── rag_enhancement_node.py
+│   │   ├── service_container.py
+│   │   ├── session_state_manager.py
+│   │   ├── stateful_pipeline.py
+│   │   └── unified_rag_service.py
+│   │   └── mental_health_knowledge/  # Vector DB storage
 │   └── utils/                    # Utility functions
 │       └── __init__.py
 ├── requirements.txt              # Python dependencies
@@ -266,18 +274,32 @@ backend/
 
 #### **Core Application** (`app/`)
 - **`main.py`**: FastAPI application instance with lifespan management, CORS configuration, and route registration
+- **`settings/`**: **NEW** Comprehensive FastAPI settings system using Pydantic BaseSettings for type-safe configuration management
 - **`auth/`**: Complete authentication system with JWT tokens, password hashing, and user management
 - **`db/`**: Database configuration, connection management, and SQLAlchemy models for users, conversations, and messages
 - **`models/`**: Additional data models and Pydantic schemas for API contracts
 
+#### **Settings System** (`settings/`)
+- **`settings.py`**: Main settings aggregation with environment-specific configuration loading
+- **`base.py`**: Base settings class with common functionality for all configuration categories
+- **`model.py`**: LLM model configuration, providers, API keys, and model parameters
+- **`performance.py`**: Performance settings including timeouts, limits, and RAG configuration
+- **`safety.py`**: Content filtering, crisis detection keywords, and safety patterns
+- **`cultural.py`**: Rwanda-specific cultural context, resources, and system prompts
+- **`database.py`**: Database connection settings, pool configuration, and Redis settings
+- **`emotional.py`**: Emotion-specific response guidance and topic adjustments
+- **`qdrant.py`**: Qdrant vector database configuration
+- **`.env.*`**: Environment-specific configuration files (development, testing, production)
+
 #### **AI Services** (`services/`)
 - **`llm_service.py`**: Main orchestrator for LLM operations with full pipeline processing (renamed from refactored version)
 - **`llm_providers.py`**: Factory pattern for multiple LLM providers (Ollama, OpenAI, Groq, vLLM)
-- **`rag_service.py`**: Retrieval-Augmented Generation with vector similarity search
+- **`unified_rag_service.py`**: Unified RAG service combining document processing and retrieval with vector similarity search
 - **`emotion_classifier.py`**: Real-time emotion detection and classification
-- **`query_validator*.py`**: Input validation and safety checking with LangGraph integration
-- **`llm_safety.py`**: Content filtering and safety guardrails
+- **`llm_safety.py`**: Content filtering and safety checks
 - **`llm_cultural_context.py`**: Gender-aware Rwandan cultural context with natural Kinyarwanda addressing
+- **`service_container.py`**: Dependency injection system for service management
+- **`stateful_pipeline.py`**: LangGraph-based conversation flow management
 
 #### **Prompt Management** (`prompts/`)
 - **`system_prompts.py`**: Core system prompts with cultural context
@@ -286,7 +308,6 @@ backend/
 - **`response_approach_prompts.py`**: Emotion-based response strategies
 
 #### **API Layer** (`routers/`)
-- **`chat_router.py`**: Main chat functionality and message processing
 - **`conversations_router.py`**: Conversation management and history
 - **`messages_router.py`**: Message CRUD operations
 
@@ -401,6 +422,7 @@ pytest --cov=backend --cov-report=html tests/
 ```
 
 ---
+
 ## Adding More Documents
 
 1. Place PDF documents in `backend/mental_health_knowledge/` directory (where vector databases are stored)
@@ -411,10 +433,10 @@ python -m backend.app.services.rag_service
 ```
 
 3. Documents will be automatically:
-   - Parsed and chunked
-   - Embedded using sentence transformers
-   - Stored in vector database (ChromaDB/Qdrant)
-   - Made available for RAG queries
+    - Parsed and chunked
+    - Embedded using sentence transformers
+    - Stored in vector database (ChromaDB/Qdrant)
+    - Made available for RAG queries
 
 **Note**: The system uses the existing vector databases in `backend/mental_health_knowledge/` for document storage and retrieval.
 
@@ -427,7 +449,7 @@ python -m backend.app.services.rag_service
 - **Query Validation**: LangGraph-based validation system with emotion detection
 - **Vector Storage**: `backend/mental_health_knowledge/` (active vector DB location)
 - **Testing**: Comprehensive test suite in `/tests/` directory
-- **Configuration**: Flexible configuration system with environment variables and external files
+- **Settings System**: **NEW** FastAPI settings system with Pydantic BaseSettings for type-safe configuration
 - **Cultural Context**: Gender-aware Rwandan cultural integration with natural Kinyarwanda addressing
 
 ### ⚠️ Legacy Code (Safe to Remove)
@@ -436,11 +458,15 @@ python -m backend.app.services.rag_service
 - **`backend/datasources/`**: Unused directory (use `backend/mental_health_knowledge/` instead)
 
 ### 🔧 Recent Updates
+- **NEW FastAPI Settings System**: Comprehensive type-safe configuration system
+  - Environment-specific configuration files (development, testing, production)
+  - Hierarchical configuration categories with validation
+  - Secure environment variable management with `MINDORA_` prefix
 - **Gender-Aware Cultural Context**: Added personalized responses based on user gender with Kinyarwanda addressing
 - **Natural Conversational Responses**: Enhanced AI to speak like a culturally aware Rwandan brother/sister
 - **HuggingFace Default Provider**: Set SmolLM3-3B as default model for optimal privacy and cultural sensitivity
-- **Configuration System Refactoring**: Replaced hardcoded values with flexible, structured configuration management
 - **Enhanced Emotion Detection**: Integrated emotion analysis into LangGraph workflow for better response personalization
+- **Service Container**: Implemented dependency injection system for better service management
 - **Updated Architecture Documentation**: Comprehensive updates to reflect current structure and capabilities
 
 ---
@@ -499,24 +525,57 @@ npm run dev
 
 ### Environment Variables
 
-Create `.env` file in project root:
+The project now uses a comprehensive FastAPI settings system with environment-specific configuration. Create `.env` file in project root:
 
 ```env
+# Environment
+ENVIRONMENT=development
+DEBUG=true
+
 # Database
-DATABASE_URL=postgresql://postgres:12345@localhost:5100/postgres
+MINDORA_DATABASE_URL=postgresql://postgres:12345@localhost:5100/postgres
 
 # LLM Providers
-OPENAI_API_KEY=your-openai-key
-GROQ_API_KEY=your-groq-key
-OLLAMA_BASE_URL=http://localhost:11434
+MINDORA_MODEL_OPENAI_API_KEY=your-openai-key
+MINDORA_MODEL_GROQ_API_KEY=your-groq-key
+MINDORA_MODEL_OLLAMA_BASE_URL=http://localhost:11434
 
 # HuggingFace Configuration (optional)
-HUGGINGFACE_MODEL_PATH=HuggingFaceTB/SmolLM3-3B  # Default: SmolLM3-3B
-HUGGINGFACE_DEVICE=cuda  # or "cpu"
+MINDORA_MODEL_DEFAULT_NAME=HuggingFaceTB/SmolLM3-3B  # Default: SmolLM3-3B
 
 # Optional
-VLLM_BASE_URL=http://localhost:8001/v1
+MINDORA_MODEL_VLLM_BASE_URL=http://localhost:8001/v1
 ```
+
+#### New FastAPI Settings System
+
+The project uses a comprehensive FastAPI settings system using Pydantic BaseSettings. This provides:
+
+- **Type Safety**: All configuration is strongly typed with validation
+- **Environment Management**: Separate configurations for development, testing, and production
+- **Secure Secrets Management**: API keys and sensitive data through environment variables
+- **Hierarchical Configuration**: Organized settings categories (model, performance, safety, cultural, database)
+- **IDE Support**: Autocompletion and documentation for all settings
+
+##### Environment-Specific Configuration
+
+The system automatically loads configuration based on the `ENVIRONMENT` variable:
+
+- **Development**: `.env.development`
+- **Testing**: `.env.testing`
+- **Production**: `.env.production`
+
+##### Configuration Categories
+
+All settings use the `MINDORA_` prefix and are organized by category:
+
+- **Model Settings** (`MINDORA_MODEL_*`): LLM configuration, providers, API keys
+- **Performance Settings** (`MINDORA_PERFORMANCE_*`): Timeouts, limits, RAG configuration
+- **Safety Settings** (`MINDORA_SAFETY_*`): Content filtering, crisis detection
+- **Cultural Settings** (`MINDORA_CULTURAL_*`): Rwanda-specific context and resources
+- **Database Settings** (`MINDORA_DATABASE_*`): Database connection and pool settings
+
+For detailed documentation, see [`backend/app/settings/README.md`](backend/app/settings/README.md).
 
 ### Logs and Debugging
 
@@ -568,6 +627,49 @@ PYTHONPATH=/path/to/mindora python -m debugpy --listen 5678 backend/app/main.py
 - Implement proper error handling for model availability
 - Gender-aware cultural context with natural Kinyarwanda addressing
 
+### Working with the New Settings System
+
+The new FastAPI settings system provides a type-safe way to manage configuration:
+
+#### Adding New Configuration Options
+
+1. **Add to appropriate settings model** in `backend/app/settings/`:
+    ```python
+    # Example: Adding a new model setting
+    class ModelSettings(BaseAppSettings):
+        new_setting: str = Field(
+            default="default_value",
+            env="MINDORA_MODEL_NEW_SETTING",
+            description="Description of the new setting"
+        )
+    ```
+
+2. **Add to environment files**:
+    - `.env.development`
+    - `.env.testing`
+    - `.env.production`
+
+3. **Use in services**:
+    ```python
+    from backend.app.settings import settings
+
+    def my_service():
+        value = settings.model.new_setting
+    ```
+
+#### Configuration Best Practices
+
+- Use the `MINDORA_` prefix for all environment variables
+- Group related settings in the same model file
+- Provide sensible defaults for all settings
+- Add validation for critical settings
+- Document all settings with descriptions
+- Use environment-specific overrides when needed
+
+For detailed documentation, see:
+- [`backend/app/settings/README.md`](backend/app/settings/README.md) - Overview
+- [`backend/app/settings/IMPLEMENTATION_GUIDE.md`](backend/app/settings/IMPLEMENTATION_GUIDE.md) - Implementation details
+
 ---
 
 ## License
@@ -581,6 +683,3 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 - LangChain community for LLM integration tools
 - FastAPI community for the excellent web framework
 - All contributors to open-source mental health initiatives
- 
-
-

@@ -84,6 +84,16 @@ langchain-groq==0.3.8
 langchain-ollama==0.3.6
 langchain-openai==0.3.32
 langchain-text-splitters==0.3.7
+langdetect==1.0.9
+langid==1.1.6
+langgraph==0.6.8
+langchain==0.3.21
+langchain-community==0.3.20
+langchain-core==0.3.75
+langchain-groq==0.3.8
+langchain-ollama==0.3.6
+langchain-openai==0.3.32
+langchain-text-splitters==0.3.7
 langgraph==0.6.8
 langgraph-checkpoint==2.1.1
 langgraph-prebuilt==0.6.4
@@ -106,7 +116,7 @@ multidict==6.2.0
 multiprocess==0.70.16
 mypy==1.18.2
 mypy-extensions==1.0.0
-nemoguardrails==0.15.0
+
 nest-asyncio==1.6.0
 networkx==3.5
 nibabel==5.3.2

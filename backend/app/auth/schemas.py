@@ -1,7 +1,8 @@
 from pydantic import BaseModel, EmailStr, constr
 from typing import Annotated, List, Optional
 from datetime import datetime
-from backend.app.services.chatbot_insights_pipeline import analyze_user_input
+from uuid import UUID
+# Legacy chatbot_insights_pipeline import removed
 
 
 
@@ -23,16 +24,16 @@ class UserLogin(BaseModel):
 class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
-    user_id: Optional[int] = None
+    user_id: Optional[UUID] = None
     username: Optional[str] = None
     gender: Optional[str] = None
 
 class MessageCreate(BaseModel):
-    conversation_id: int
+    conversation_id: UUID
     content: Annotated[str, constr(min_length=1)]  # Ensures message is not empty
 
 class MessageOut(BaseModel):
-    id: int
+    id: UUID
     sender: str
     content: str
     timestamp: datetime
@@ -41,7 +42,7 @@ class MessageOut(BaseModel):
         from_attributes = True  # for Pydantic v2 (replaces orm_mode)
 
 class ConversationOut(BaseModel):
-    id: int
+    id: UUID
     started_at: datetime
 
     class Config:

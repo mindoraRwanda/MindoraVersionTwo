@@ -1,31 +1,73 @@
 import os
 from dotenv import load_dotenv
+from pathlib import Path
 
-# Load environment variables from .env file
-load_dotenv()
+# Get the environment variable
+environment = os.getenv("ENVIRONMENT", "development").lower()
+
+# Construct the path to the environment-specific .env file in the root directory
+root_dir = Path(__file__).parent.parent.parent  # Go up three levels from backend/app/main.py
+env_file = root_dir / f".env.{environment}"
+
+# Load environment variables from the environment-specific file
+# Fall back to .env.example if the specific file doesn't exist
+if env_file.exists():
+    load_dotenv(env_file, override=True)
+    print(f"🔧 Loaded environment variables from {env_file}")
+else:
+    # Try to load from .env.example as a fallback
+    example_env_file = root_dir / ".env.example"
+    if example_env_file.exists():
+        load_dotenv(example_env_file, override=True)
+        print(f"🔧 Loaded environment variables from {example_env_file} (fallback)")
+    else:
+        print("⚠️ No environment file found, using system environment variables only")
+
+# Initialize the new settings system (lazy-loaded)
+from .settings import settings
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from backend.app.routers.chat_router import router as chat_router
+
 
 # Import your database engine and models
-from backend.app.db.database import engine
-from backend.app.db import models
-from backend.app.auth.auth_router import router as auth_router
-from backend.app.auth.emotion_router import router as emotion_router
-from backend.app.auth.emotion_router import router as mental_health_router
-from backend.app.routers.conversations_router import router as conversations_router
-from backend.app.routers.messages_router import router as messages_router
+try:
+    from .db.database import engine
+    from .db import models
+except ImportError:
+    from .db.database import engine
+    from .db import models
+
+try:
+    from .auth.auth_router import router as auth_router
+    from .auth.emotion_router import router as emotion_router
+    from .auth.emotion_router import router as mental_health_router
+except ImportError:
+    from .auth.auth_router import router as auth_router
+    from .auth.emotion_router import router as emotion_router
+    from .auth.emotion_router import router as mental_health_router
+
+try:
+    from .routers.conversations_router import router as conversations_router
+    from .routers.messages_router import router as messages_router
+except ImportError:
+    from .routers.conversations_router import router as conversations_router
+    from .routers.messages_router import router as messages_router
 
 # Import service container for global service management
-from backend.app.services.service_container import service_container, check_service_health
+try:
+    from .services.service_container import service_container, check_service_health
+except ImportError:
+    from .services.service_container import service_container, check_service_health
 
 # TEMPORARY: Drop everything before recreating
 models.Base.metadata.create_all(bind=engine)  # ❗️ This rebuilds all tables
 
 # Create FastAPI app first
 app = FastAPI(
-    title="Therapy Chatbot API"
+    title=settings.api_title,
+    version=settings.api_version,
+    debug=settings.debug
 )
 
 # Startup event handler for service initialization
@@ -72,12 +114,11 @@ async def shutdown_event():
 app.include_router(auth_router)  # Authentication endpoints
 app.include_router(conversations_router)  # Conversation management
 app.include_router(messages_router)  # Message handling
-app.include_router(chat_router)  # Chat functionality
 
-# CORS for frontend (adjust domains as needed)
+# CORS for frontend (using settings)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],  # Frontend origin
+    allow_origins=settings.cors_origins,  # From settings
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

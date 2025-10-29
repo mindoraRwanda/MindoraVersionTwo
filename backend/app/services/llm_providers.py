@@ -1,19 +1,11 @@
-"""
-Dynamic LLM Provider System supporting multiple backends.
-
-This module provides a unified interface for different LLM providers:
-- ChatOllama (default)
-- ChatGroq
-- ChatOpenAI
-- ChatHuggingFace (local models)
-"""
 from abc import ABC, abstractmethod
 from typing import List, Dict, Any, Optional, Union
 import os
 import requests
 import asyncio
+from ..settings.settings import settings
 try:
-    from langchain.schema import BaseMessage, HumanMessage, SystemMessage, AIMessage
+    from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage, AIMessage
 except ImportError:
     # Fallback for type hints if langchain is not available
     BaseMessage = Any
@@ -33,6 +25,10 @@ class LLMProvider(ABC):
     async def generate_response(self, messages: List[Any]) -> str:
         """Generate a response from the given messages."""
         pass
+    
+    async def agenerate(self, messages: List[Any]) -> str:
+        """Alias for generate_response for compatibility with pipeline nodes."""
+        return await self.generate_response(messages)
 
     @abstractmethod
     def is_available(self) -> bool:
@@ -45,13 +41,27 @@ class LLMProvider(ABC):
         """Return the provider name."""
         pass
 
+    def _extract_content(self, response: Any) -> str:
+        """Extract content from various LLM response formats."""
+        if hasattr(response, 'content') and response.content is not None:
+            content = response.content
+            if isinstance(content, str):
+                return content.strip()
+            elif isinstance(content, list) and content:
+                first_item = content
+                if isinstance(first_item, dict) and 'text' in first_item and isinstance(first_item['text'], str):
+                    return first_item['text'].strip()
+                elif isinstance(first_item, str):
+                    return first_item.strip()
+        return str(response).strip() # Fallback to string conversion
+
 
 class ChatOllamaProvider(LLMProvider):
     """Ollama LLM provider implementation."""
 
     def __init__(self, model_name: str, base_url: Optional[str] = None, **kwargs):
         super().__init__(model_name, **kwargs)
-        self.base_url = base_url or os.getenv("OLLAMA_BASE_URL", "http://127.0.0.1:11434")
+        self.base_url = base_url or (settings.model.ollama_base_url if settings.model else "http://127.0.0.1:11434")
         self._chat_model = None
 
     @property
@@ -89,18 +99,20 @@ class ChatOllamaProvider(LLMProvider):
         if not self._chat_model:
             try:
                 from langchain_ollama import ChatOllama
-                from backend.app.services.llm_config import model_config
+                # Use the compatibility layer for gradual migration
+                model_temperature = settings.model.temperature if settings.model else 0.85
                 self._chat_model = ChatOllama(
                     base_url=self.base_url,
                     model=self.model_name,
-                    temperature=model_config.temperature,
+                    temperature=model_temperature,
                     **{k: v for k, v in self.kwargs.items() if k not in ['base_url']}
                 )
+                print(f"✅ Ollama chat model created: {self.model_name}")
             except ImportError:
                 raise RuntimeError("langchain_ollama not installed. Install with: pip install langchain_ollama")
 
         response = await self._chat_model.ainvoke(messages)
-        return response.content.strip()
+        return self._extract_content(response)
 
 
 class ChatOpenAIProvider(LLMProvider):
@@ -127,18 +139,19 @@ class ChatOpenAIProvider(LLMProvider):
                 if not self.api_key:
                     raise RuntimeError("OpenAI API key not configured. Set OPENAI_API_KEY environment variable.")
 
-                from backend.app.services.llm_config import model_config
+                # Use the compatibility layer for gradual migration
+                model_temperature = settings.model.temperature if settings.model else 1.0
                 self._chat_model = ChatOpenAI(
                     model=self.model_name,
                     api_key=self.api_key,
-                    temperature=model_config.temperature,
+                    temperature=model_temperature,
                     **{k: v for k, v in self.kwargs.items() if k not in ['api_key']}
                 )
             except ImportError:
                 raise RuntimeError("langchain_openai not installed. Install with: pip install langchain_openai")
 
         response = await self._chat_model.ainvoke(messages)
-        return response.content.strip()
+        return self._extract_content(response)
 
 
 class ChatGroqProvider(LLMProvider):
@@ -165,18 +178,19 @@ class ChatGroqProvider(LLMProvider):
                 if not self.api_key:
                     raise RuntimeError("Groq API key not configured. Set GROQ_API_KEY environment variable.")
 
-                from backend.app.services.llm_config import model_config
+                # Use the compatibility layer for gradual migration
+                model_temperature = settings.model.temperature if settings.model else 1.0
                 self._chat_model = ChatGroq(
                     model=self.model_name,
                     api_key=self.api_key,
-                    temperature=model_config.temperature,
+                    temperature=model_temperature,
                     **{k: v for k, v in self.kwargs.items() if k not in ['api_key']}
                 )
             except ImportError:
                 raise RuntimeError("langchain_groq not installed. Install with: pip install langchain_groq")
 
         response = await self._chat_model.ainvoke(messages)
-        return response.content.strip()
+        return self._extract_content(response)
 
 
 class ChatHuggingFaceProvider(LLMProvider):
@@ -258,13 +272,14 @@ class ChatHuggingFaceProvider(LLMProvider):
             except Exception as e:
                 raise RuntimeError(f"Failed to load model {self.model_path}: {e}")
 
-            from backend.app.services.llm_config import model_config
+            # Use the compatibility layer for gradual migration
+            model_temperature = settings.model.temperature if settings.model else 1.0
             # Create pipeline for text generation
             self._chat_model = pipeline(
                 "text-generation",
                 model=self._model,
                 tokenizer=self._tokenizer,
-                temperature=model_config.temperature,
+                temperature=model_temperature,
                 max_new_tokens=512,
                 pad_token_id=self._tokenizer.eos_token_id,
                 **self.kwargs

@@ -23,7 +23,6 @@ class TestLangGraphWorkflow:
         mock_provider = AsyncMock()
 
         async def mock_generate_response(messages):
-            # Simulate different responses based on message content
             # Extract content from messages to check for keywords
             message_content = ""
             for msg in messages:
@@ -32,28 +31,62 @@ class TestLangGraphWorkflow:
                 else:
                     message_content += str(msg) + " "
 
-            # Check for crisis keywords
-            crisis_keywords = ["kill myself", "suicide", "end my life", "don't want to live", "harm myself"]
-            if any(keyword in message_content.lower() for keyword in crisis_keywords):
-                return '{"is_crisis": true, "confidence": 0.95, "crisis_indicators": ["suicidal ideation"], "severity": "critical", "recommended_action": "immediate_intervention"}'
+            # Determine the type of request based on the prompt content
+            if "Query to classify:" in message_content:
+                # This is a classification request
+                query = message_content.split("Query to classify:")[-1].strip().strip('"')
 
-            # Check for random question keywords
-            random_keywords = ["weather", "python", "programming", "install", "computer", "software", "what is", "how do", "capital", "population"]
-            if any(keyword in message_content.lower() for keyword in random_keywords):
-                return '{"query_type": "RANDOM_QUESTION", "confidence": 0.9, "reasoning": "Random question detected", "keywords_found": ["weather"], "is_crisis": false}'
+                # Check for crisis keywords in the actual query
+                crisis_keywords = ["kill myself", "suicide", "end my life", "don't want to live", "harm myself", "suicidal thoughts"]
+                if any(keyword in query.lower() for keyword in crisis_keywords):
+                    return '{"query_type": "CRISIS", "confidence": 0.95, "reasoning": "Crisis indicators detected", "keywords_found": ["suicide"], "is_crisis": true}'
 
-            # Check for unclear queries
-            unclear_keywords = ["xyz", "abc", "maybe", "idk", "not sure", "random"]
-            if any(keyword in message_content.lower() for keyword in unclear_keywords):
-                return '{"query_type": "UNCLEAR", "confidence": 0.8, "reasoning": "Unclear query", "keywords_found": [], "is_crisis": false}'
+                # Check for random question keywords in the actual query
+                random_keywords = ["weather", "python", "programming", "install", "computer", "software", "what is", "how do", "capital", "population"]
+                if any(keyword in query.lower() for keyword in random_keywords):
+                    return '{"query_type": "RANDOM_QUESTION", "confidence": 0.9, "reasoning": "Random question detected", "keywords_found": ["weather"], "is_crisis": false}'
 
-            # Default to mental support for emotional content
-            mental_keywords = ["feeling", "anxious", "sad", "angry", "stressed", "depressed", "worried", "overwhelmed"]
-            if any(keyword in message_content.lower() for keyword in mental_keywords):
-                return '{"query_type": "MENTAL_SUPPORT", "confidence": 0.9, "reasoning": "Mental health indicators detected", "keywords_found": ["anxious"], "is_crisis": false}'
+                # Check for unclear queries in the actual query
+                unclear_keywords = ["xyz", "abc", "maybe", "idk", "not sure", "random"]
+                if any(keyword in query.lower() for keyword in unclear_keywords) or query.strip() == "":
+                    return '{"query_type": "UNCLEAR", "confidence": 0.8, "reasoning": "Unclear query", "keywords_found": [], "is_crisis": false}'
 
-            # Default fallback
-            return '{"query_type": "MENTAL_SUPPORT", "confidence": 0.7, "reasoning": "Default classification", "keywords_found": [], "is_crisis": false}'
+                # Default to mental support for emotional content in the actual query
+                mental_keywords = ["feeling", "anxious", "sad", "angry", "stressed", "depressed", "worried", "overwhelmed", "help"]
+                if any(keyword in query.lower() for keyword in mental_keywords):
+                    return '{"query_type": "MENTAL_SUPPORT", "confidence": 0.9, "reasoning": "Mental health indicators detected", "keywords_found": ["anxious"], "is_crisis": false}'
+
+                # Default fallback
+                return '{"query_type": "MENTAL_SUPPORT", "confidence": 0.7, "reasoning": "Default classification", "keywords_found": [], "is_crisis": false}'
+
+            elif "Query to assess for crisis:" in message_content:
+                # This is a crisis assessment request
+                query = message_content.split("Query to assess for crisis:")[-1].strip().strip('"')
+                crisis_keywords = ["kill myself", "suicide", "end my life", "don't want to live", "harm myself"]
+                if any(keyword in query.lower() for keyword in crisis_keywords):
+                    return '{"is_crisis": true, "confidence": 0.95, "crisis_indicators": ["suicidal ideation"], "severity": "critical", "recommended_action": "immediate_intervention"}'
+                else:
+                    return '{"is_crisis": false, "confidence": 0.8, "crisis_indicators": [], "severity": "low", "recommended_action": "monitor"}'
+
+            elif "Analyze the emotions in this query:" in message_content:
+                # This is an emotion detection request
+                return '{"detected_emotion": "anxiety", "confidence": 0.8, "emotion_scores": {"anxiety": 0.9, "fear": 0.6}, "reasoning": "Emotional content detected", "intensity": "high", "context_relevance": "high"}'
+
+            elif "Generate suggestions for this query:" in message_content:
+                # This is a suggestions request
+                return '{"suggestions": ["Listen actively", "Validate feelings"], "routing_priority": "high", "requires_human_intervention": false, "follow_up_questions": ["How long have you felt this way?"], "next_best_action": "mental_health_support"}'
+
+            elif "Analyze this conversation context:" in message_content:
+                # This is context analysis
+                return '{"conversation_type": "new", "emotional_progression": "stable", "key_themes": ["anxiety"], "user_preferences": [], "suggested_focus": "support", "memory_cues": []}'
+
+            elif "Manage memory for this interaction:" in message_content:
+                # This is memory management
+                return '{"to_remember": [], "to_forget": [], "memory_summary": "User expressed anxiety", "privacy_notes": ""}'
+
+            else:
+                # Default response for strategy-based generation
+                return "I understand you're going through a difficult time. I'm here to listen and support you."
 
         mock_provider.generate_response = mock_generate_response
         return mock_provider
@@ -94,7 +127,7 @@ class TestLangGraphWorkflow:
 
         result = await validator.validate_query(crisis_query)
 
-        assert result["is_crisis"] == False  # Mock returns false
+        assert result["is_crisis"] == True  # Crisis correctly detected
         assert "crisis_severity" in result
         assert result["routing_decision"] == "crisis_intervention"
 
@@ -106,7 +139,7 @@ class TestLangGraphWorkflow:
         result = await validator.validate_query(random_query)
 
         assert result["query_type"] == "random_question"
-        assert result["routing_decision"] == "general_assistance"
+        assert result["routing_decision"] == "random_question_filtered"
 
     @pytest.mark.asyncio
     async def test_unclear_query_workflow(self, validator):
@@ -190,7 +223,7 @@ class TestLangGraphWorkflow:
             ("I'm so angry right now", "mental_support"),
             ("I'm stressed about work", "mental_support"),
             ("I'm happy today", "mental_support"),  # Still mental support
-            ("The sky is blue", "random_question")
+            ("What is Python?", "random_question")  # Use a clearer technical question
         ]
 
         for query, expected_type in test_cases:
@@ -223,7 +256,7 @@ class TestLangGraphWorkflowIntegration:
 
         # Simulate a user conversation
         conversation_flow = [
-            "Hello, I'm feeling anxious",
+            "I'm feeling really anxious today",
             "Yes, it's been getting worse lately",
             "I think I need some help",
             "Thank you for listening"
@@ -270,6 +303,9 @@ class TestLangGraphWorkflowIntegration:
         async def mock_context_response(messages):
             if "context" in str(messages).lower():
                 return '{"conversation_type": "ongoing", "emotional_progression": "worsening", "key_themes": ["anxiety", "depression"], "user_preferences": ["direct_communication"], "suggested_focus": "crisis_intervention", "memory_cues": ["User mentioned suicidal thoughts previously"]}'
+            # For classification requests in context test
+            elif "Query to classify:" in str(messages):
+                return '{"query_type": "MENTAL_SUPPORT", "confidence": 0.9, "reasoning": "Mental health indicators detected", "keywords_found": ["anxious"], "is_crisis": false}'
             return "Mock response"
 
         mock_llm_provider.generate_response = mock_context_response

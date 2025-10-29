@@ -1,31 +1,37 @@
-"""
-Cultural context and response generation for Rwanda-specific mental health support.
-"""
 from typing import Dict, List, Any
-from .llm_config import (
-    RWANDA_CULTURAL_CONTEXT, RWANDA_CRISIS_RESOURCES,
-    EMOTION_RESPONSES, TOPIC_ADJUSTMENTS, GROUNDING_EXERCISE,
-    SYSTEM_PROMPT_TEMPLATE
-)
+import random
+# Use the compatibility layer for gradual migration
+from backend.app.settings.settings import settings
+from backend.app.prompts.system_prompts import SystemPrompts
 
 
 class RwandaCulturalManager:
     """Manages Rwanda-specific cultural context and resources."""
 
     @staticmethod
-    def get_crisis_resources() -> Dict[str, Any]:
-        """Get Rwanda-specific crisis resources"""
-        return RWANDA_CRISIS_RESOURCES
+    def get_crisis_resources(language: str = 'en') -> Dict[str, Any]:
+        """Get Rwanda-specific crisis resources in the specified language"""
+        from ..prompts.cultural_context_prompts import CulturalContextPrompts
+        return CulturalContextPrompts.get_rwanda_crisis_resources(language)
 
     @staticmethod
-    def get_cultural_context() -> Dict[str, str]:
-        """Get Rwanda-specific cultural context"""
-        return RWANDA_CULTURAL_CONTEXT
+    def get_cultural_context(language: str = 'en') -> Dict[str, str]:
+        """Get Rwanda-specific cultural context in the specified language"""
+        from ..prompts.cultural_context_prompts import CulturalContextPrompts
+        contexts = CulturalContextPrompts.get_rwanda_cultural_context(language)
+        # Return a random phrase for each context type
+        result = {}
+        for key, phrases in contexts.items():
+            if isinstance(phrases, list) and phrases:
+                result[key] = random.choice(phrases)
+            else:
+                result[key] = phrases if isinstance(phrases, str) else ""
+        return result
 
     @staticmethod
     def get_grounding_exercise() -> str:
         """Get culturally resonant grounding exercise"""
-        return GROUNDING_EXERCISE
+        return SystemPrompts.get_grounding_exercise()
 
 
 class ResponseApproachManager:
@@ -39,7 +45,7 @@ class ResponseApproachManager:
     ) -> Dict[str, str]:
         """Generate contextually appropriate response approach"""
         lowered = user_message.lower()
-        cultural_elements = RWANDA_CULTURAL_CONTEXT
+        cultural_elements = settings.cultural.cultural_context if settings.cultural else {}
 
         # Default approach
         approach = {
@@ -51,8 +57,10 @@ class ResponseApproachManager:
         }
 
         # Emotion-specific approaches with cultural integration
-        if emotion in EMOTION_RESPONSES:
-            emotion_response = EMOTION_RESPONSES[emotion]
+        emotion_responses = settings.emotional.emotion_responses if settings.emotional else {}
+        
+        if emotion in emotion_responses:
+            emotion_response = emotion_responses[emotion]
             approach.update({
                 "tone": emotion_response.get("natural_tone", "empathetic"),
                 "cultural_element": cultural_elements.get("ubuntu_philosophy", ""),
@@ -69,7 +77,8 @@ class ResponseApproachManager:
             })
 
         # Topic-specific adjustments
-        for topic, adjustments in TOPIC_ADJUSTMENTS.items():
+        topic_adjustments = settings.emotional.topic_adjustments if settings.emotional else {}
+        for topic, adjustments in topic_adjustments.items():
             if topic in lowered:
                 if "cultural_element" in adjustments:
                     approach["cultural_element"] = cultural_elements.get(
@@ -85,21 +94,27 @@ class ResponseApproachManager:
     def build_system_prompt(
         context_parts: List[str],
         emotion: str,
-        response_approach: Dict[str, str]
+        response_approach: Dict[str, str],
+        language: str = 'en'
     ) -> str:
-        """Build contextual system prompt with Rwanda-specific context"""
-        crisis_resources = RWANDA_CRISIS_RESOURCES
+        """Build contextual system prompt with Rwanda-specific context in the specified language"""
+        crisis_resources = RwandaCulturalManager.get_crisis_resources(language)
 
         context_str = "\n".join(context_parts) if context_parts else "This appears to be a new conversation."
 
-        return SYSTEM_PROMPT_TEMPLATE.format(
-            context=context_str,
-            emotion=emotion,
-            validation=response_approach.get('validation', ''),
-            support_offering=response_approach.get('support_offering', ''),
-            crisis_helpline=crisis_resources['national_helpline'],
-            emergency=crisis_resources['emergency']
-        )
+        if settings.cultural:
+            return SystemPrompts.get_main_system_prompt(
+                context=context_str,
+                emotion=emotion,
+                validation=response_approach.get('validation', ''),
+                support_offering=response_approach.get('support_offering', ''),
+                crisis_helpline=crisis_resources.get('national_helpline', ''),
+                emergency=crisis_resources.get('emergency', ''),
+                language=language
+            )
+        else:
+            # Fallback basic prompt
+            return f"You are a helpful mental health assistant. Context: {context_str}, Emotion: {emotion}"
 
 
 class ConversationContextManager:
@@ -117,10 +132,10 @@ class ConversationContextManager:
     @staticmethod
     def is_simple_greeting(user_message: str) -> bool:
         """Check if message is a simple greeting"""
-        from .llm_config import SIMPLE_GREETINGS
+        simple_greetings = settings.safety.simple_greetings if settings.safety else []
         return (
             len(user_message.strip()) < 15 and
-            any(greeting in user_message.lower() for greeting in SIMPLE_GREETINGS)
+            any(greeting in user_message.lower() for greeting in simple_greetings)
         )
 
     @staticmethod

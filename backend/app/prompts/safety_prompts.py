@@ -1,5 +1,5 @@
 """
-Safety prompts and guardrails for the mental health chatbot.
+Safety prompts and responses for the mental health chatbot.
 
 This module contains prompts and configurations for ensuring safe conversations.
 """
@@ -8,15 +8,15 @@ from typing import Dict, List, Any
 
 
 class SafetyPrompts:
-    """Centralized safety prompts and guardrails."""
+    """Centralized safety prompts and responses."""
 
     @staticmethod
-    def get_guardrails_config() -> str:
+    def get_safety_responses() -> Dict[str, str]:
         """
-        Get the guardrails configuration for the chatbot.
+        Get the safety response templates.
 
         Returns:
-            Colang configuration string for guardrails
+            Dictionary of safety response templates
         """
         return """colang: |
           flow safety_and_boundary_check

@@ -1,12 +1,14 @@
-from passlib.context import CryptContext
+import bcrypt
 import jwt as pyjwt
 from datetime import datetime, timedelta
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
-from backend.app.db.models import User
-from backend.app.db.database import get_db
+from uuid import UUID
+from ..db.models import User
+from ..db.database import get_db
 import os
+import hashlib
 
 # Auth scheme for FastAPI
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
@@ -16,14 +18,20 @@ SECRET_KEY = os.getenv("SECRET_KEY", "dev_default_secret_key")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 360
 
-# Password hashing config
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-
 def hash_password(password: str) -> str:
-    return pwd_context.hash(password)
+    # Pre-hash with SHA-256 to handle any length password while preserving uniqueness
+    # This ensures we stay within bcrypt's 72-byte limit without losing password data
+    password_hash = hashlib.sha256(password.encode('utf-8')).hexdigest()
+    # Use bcrypt directly to avoid passlib compatibility issues
+    salt = bcrypt.gensalt()
+    hashed = bcrypt.hashpw(password_hash.encode('utf-8'), salt)
+    return hashed.decode('utf-8')
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
-    return pwd_context.verify(plain_password, hashed_password)
+    # Pre-hash with SHA-256 to match the hashing process
+    password_hash = hashlib.sha256(plain_password.encode('utf-8')).hexdigest()
+    # Use bcrypt directly to avoid passlib compatibility issues
+    return bcrypt.checkpw(password_hash.encode('utf-8'), hashed_password.encode('utf-8'))
 
 def create_access_token(data: dict) -> str:
     to_encode = data.copy()
@@ -48,7 +56,7 @@ def get_current_user(
     except pyjwt.PyJWTError:
         raise credentials_exception
 
-    user = db.query(User).filter(User.id == int(user_id)).first()
+    user = db.query(User).filter(User.uuid == UUID(user_id)).first()
     if user is None:
         raise credentials_exception
     return user

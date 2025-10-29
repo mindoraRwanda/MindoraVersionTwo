@@ -8,9 +8,28 @@ services in the application with proper dependency injection and lifecycle manag
 import asyncio
 import os
 import logging
+from typing import Dict, Any, Optional, TypeVar, Type, Generic, List, Callable
+from dataclasses import dataclass, field
+from contextlib import asynccontextmanager
+
+import asyncio
+import os
+import logging
 from typing import Dict, Any, Optional, TypeVar, Type, Generic, List
 from dataclasses import dataclass, field
 from contextlib import asynccontextmanager
+
+from ..settings.settings import settings
+from .llm_database_operations import DatabaseManager as LLMDatabaseOperations # Renamed to avoid conflict
+from .session_state_manager import SessionStateManager, session_manager
+from .llm_service import LLMService
+# Legacy crisis_interceptor removed - using stateful pipeline instead
+from .emotion_classifier import LLMEmotionClassifier, initialize_emotion_classifier, classify_emotion_sync
+from .unified_rag_service import UnifiedRAGService, create_unified_rag_service
+from .stateful_pipeline import StatefulMentalHealthPipeline
+from .llm_cultural_context import RwandaCulturalManager, ResponseApproachManager, ConversationContextManager
+from .llm_safety import SafetyManager
+from .crisis_alert_service import CrisisAlertService
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -32,7 +51,7 @@ class ServiceRegistry:
     """Registry for service factories and configurations."""
 
     def __init__(self):
-        self._factories: Dict[str, callable] = {}
+        self._factories: Dict[str, Callable] = {}
         self._configs: Dict[str, ServiceConfig] = {}
         self._instances: Dict[str, Any] = {}
         self._initializing: set[str] = set()
@@ -41,7 +60,7 @@ class ServiceRegistry:
     def register_service(
         self,
         name: str,
-        factory: callable,
+        factory: Callable,
         config: Optional[ServiceConfig] = None
     ):
         """Register a service factory with its configuration."""
@@ -80,7 +99,7 @@ class ServiceContainer:
         # Core services (no dependencies)
         self.registry.register_service(
             "llm_config",
-            lambda: self._create_llm_config(),
+            lambda: settings, # Directly return settings
             ServiceConfig("llm_config", required=True)
         )
 
@@ -98,58 +117,46 @@ class ServiceContainer:
             ServiceConfig("session_manager", ["database"], required=True)
         )
 
-        # LLM services
-        self.registry.register_service(
-            "llm_service",
-            lambda: self._create_llm_service(),
-            ServiceConfig("llm_service", ["llm_config"], required=True)
-        )
+        # LLM services (moved to after RAG service)
 
-        # Query validation and processing
-        self.registry.register_service(
-            "query_validator",
-            lambda: self._create_query_validator(),
-            ServiceConfig("query_validator", ["llm_service"], required=True)
-        )
 
-        # Crisis detection
-        self.registry.register_service(
-            "crisis_interceptor",
-            lambda: self._create_crisis_interceptor(),
-            ServiceConfig("crisis_interceptor", required=True)
-        )
+        # Crisis detection now handled by stateful pipeline
 
-        # Emotion classification
+        # Emotion classification (LLM-powered standalone API)
         self.registry.register_service(
             "emotion_classifier",
             lambda: self._create_emotion_classifier(),
             ServiceConfig("emotion_classifier", ["llm_service"], required=False)
         )
 
-        # RAG services
+        # Unified RAG service
         self.registry.register_service(
-            "retriever_service",
-            lambda: self._create_retriever_service(),
-            ServiceConfig("retriever_service", ["database"], required=False)
+            "unified_rag_service",
+            lambda: self._create_unified_rag_service(),
+            ServiceConfig("unified_rag_service", [], required=False)
         )
 
+        # LLM services (depends on RAG)
         self.registry.register_service(
-            "rag_service",
-            lambda: self._create_rag_service(),
-            ServiceConfig("rag_service", ["retriever_service", "llm_service"], required=False)
+            "llm_service",
+            lambda: self._create_llm_service(),
+            ServiceConfig("llm_service", ["llm_config", "unified_rag_service"], required=True)
         )
 
-        # State management
+        # Crisis alert service
         self.registry.register_service(
-            "state_router",
-            lambda: self._create_state_router(),
-            ServiceConfig("state_router", ["session_manager", "crisis_interceptor"], required=True)
+            "crisis_alert_service",
+            lambda: self._create_crisis_alert_service(),
+            ServiceConfig("crisis_alert_service", [], required=False)
         )
 
+
+
+        # Stateful mental health pipeline
         self.registry.register_service(
-            "langgraph_state_router",
-            lambda: self._create_langgraph_state_router(),
-            ServiceConfig("langgraph_state_router", ["llm_service", "session_manager", "crisis_interceptor"], required=True)
+            "stateful_pipeline",
+            lambda: self._create_stateful_pipeline(),
+            ServiceConfig("stateful_pipeline", ["llm_service", "unified_rag_service"], required=True)
         )
 
         # Cultural context
@@ -168,13 +175,11 @@ class ServiceContainer:
 
     def _create_llm_config(self):
         """Create LLM configuration service."""
-        from .llm_config import config_manager
-        return config_manager
+        return settings
 
     def _create_database_service(self):
         """Create database service."""
         try:
-            from .llm_database_operations import LLMDatabaseOperations
             return LLMDatabaseOperations()
         except ImportError:
             logger.warning("LLMDatabaseOperations not available, using mock")
@@ -182,135 +187,113 @@ class ServiceContainer:
 
     def _create_session_manager(self):
         """Create session state manager."""
-        from .session_state_manager import SessionStateManager, session_manager
         return session_manager
 
     def _create_llm_service(self):
         """Create LLM service."""
-        from .llm_service import LLMService
-        return LLMService(use_vllm=False, provider_name=os.getenv("PROVIDER_NAME"), model_name=os.getenv("PROVIDER_MODEL"))
-
-    def _create_query_validator(self):
-        """Create query validator service."""
+        llm_service = LLMService(use_vllm=False, provider_name=os.getenv("PROVIDER"), model_name=os.getenv("MODEL_NAME"))
+        
+        # Inject RAG service if available
         try:
-            from .query_validator_langgraph import LangGraphQueryValidator
-            # Check if LLM service is available for LangGraph validator
-            if "llm_service" in self.registry._instances:
-                llm_service = self.registry._instances["llm_service"]
-                if llm_service and llm_service.llm_provider:
-                    return LangGraphQueryValidator(llm_provider=llm_service.llm_provider)
-                else:
-                    # Fallback to basic validator if no LLM provider
-                    from .query_validator import QueryValidatorService
-                    return QueryValidatorService()
-            else:
-                # Fallback to basic validator if LLM service not available
-                from .query_validator import QueryValidatorService
-                return QueryValidatorService()
+            rag_service = self.get_service("unified_rag_service")
+            if rag_service:
+                llm_service.set_rag_service(rag_service)
+                logger.info("🔍 RAG service injected into LLM service")
         except Exception as e:
-            logger.warning(f"QueryValidator creation failed: {e}, using None")
-            return None
+            logger.warning(f"Failed to inject RAG service into LLM service: {e}")
+        
+        return llm_service
 
-    def _create_crisis_interceptor(self):
-        """Create crisis interceptor service."""
-        try:
-            from .crisis_interceptor import CrisisInterceptor
-            return CrisisInterceptor()
-        except ImportError:
-            logger.warning("CrisisInterceptor not available, using mock")
-            return None
+
+    # Legacy crisis interceptor creation method removed
 
     def _create_emotion_classifier(self):
-        """Create emotion classifier service."""
+        """Create LLM-powered emotion classifier service."""
         try:
-            from .emotion_classifier import classify_emotion, initialize_emotion_classifier
+            # Get LLM service for emotion classification
+            llm_service = self.get_service("llm_service")
+            if not llm_service:
+                logger.warning("LLM service not available for emotion classifier")
+                return None
+            
+            # Create LLM emotion classifier
+            emotion_classifier = LLMEmotionClassifier(llm_service.llm_provider)
+            logger.info("🧠 LLM-powered emotion classifier created successfully")
+            return emotion_classifier
+            
+        except Exception as e:
+            logger.warning(f"LLM emotion classifier creation failed: {e}")
+            return None
 
-            class EmotionClassifier:
-                """Wrapper class for emotion classification functionality."""
+    def _create_unified_rag_service(self):
+        """Create unified RAG service."""
+        try:
+            rag_service = create_unified_rag_service()
+            if rag_service:
+                logger.info("🔍 Unified RAG service created successfully")
+                return rag_service
+            else:
+                logger.warning("Failed to create unified RAG service")
+                return None
+        except Exception as e:
+            logger.warning(f"Unified RAG service creation failed: {e}")
+            return None
 
+    def _create_crisis_alert_service(self):
+        """Create crisis alert service."""
+        try:
+            crisis_alert_service = CrisisAlertService()
+            logger.info("🚨 Crisis alert service created successfully")
+            return crisis_alert_service
+        except Exception as e:
+            logger.warning(f"Crisis alert service creation failed: {e}")
+            return None
+
+    def _create_stateful_pipeline(self):
+        """Create stateful mental health pipeline service."""
+        try:
+            # Check if LLM service is available in the registry
+            if "llm_service" in self.registry._instances:
+                llm_service = self.registry._instances["llm_service"]
+                
+                # Get RAG service if available
+                rag_service = None
+                if "unified_rag_service" in self.registry._instances:
+                    rag_service = self.registry._instances["unified_rag_service"]
+                    logger.info("🔍 RAG service injected into stateful pipeline")
+                
+                return StatefulMentalHealthPipeline(
+                    llm_provider=llm_service.llm_provider,
+                    rag_service=rag_service
+                )
+            else:
+                # Fallback to default if LLM service not available yet
+                logger.warning("LLM service not available for stateful_pipeline, using default")
+                return StatefulMentalHealthPipeline()
+        except ImportError as e:
+            logger.warning(f"Stateful pipeline not available: {e}")
+            # Return a mock service
+            class MockStatefulPipeline:
                 def __init__(self):
-                    self.model = None
-                    self.emotion_embeddings = None
+                    self.initialized = False
 
-                def initialize(self):
-                    """Initialize the emotion classifier."""
-                    try:
-                        self.model = initialize_emotion_classifier()
-                        return True
-                    except Exception as e:
-                        logger.warning(f"Failed to initialize emotion classifier: {e}")
-                        return False
+                async def process_query(self, query, user_id=None, conversation_history=None):
+                    return {
+                        "response": "I'm here to support you. How can I help you today?",
+                        "response_confidence": 0.5,
+                        "response_reason": "Mock response",
+                        "processing_metadata": [],
+                        "errors": []
+                    }
 
-                def classify_emotion(self, text: str) -> str:
-                    """Classify emotion in text."""
-                    try:
-                        return classify_emotion(text)
-                    except Exception as e:
-                        logger.warning(f"Emotion classification failed: {e}")
-                        return "neutral"
+                def health_check(self):
+                    return self.initialized
 
-                def health_check(self) -> bool:
-                    """Check if emotion classifier is healthy."""
-                    return self.model is not None
-
-            classifier = EmotionClassifier()
-            # Try to initialize but don't fail if it doesn't work
-            try:
-                classifier.initialize()
-            except Exception:
-                pass  # Continue with uninitialized classifier
-
-            return classifier
-
-        except ImportError:
-            logger.warning("EmotionClassifier not available, using mock")
-            return None
-
-    def _create_retriever_service(self):
-        """Create retriever service."""
-        try:
-            from .retriever_service import RetrieverService
-            return RetrieverService()
-        except ImportError:
-            logger.warning("RetrieverService not available, using mock")
-            return None
-
-    def _create_rag_service(self):
-        """Create RAG service."""
-        try:
-            from .rag_service import RAGService
-            return RAGService()
-        except ImportError:
-            logger.warning("RAGService not available, using mock")
-            return None
-
-    def _create_state_router(self):
-        """Create state router service."""
-        try:
-            from .state_router import StateRouter
-            return StateRouter()
-        except ImportError:
-            logger.warning("StateRouter not available, using mock")
-            return None
-
-    def _create_langgraph_state_router(self):
-        """Create LangGraph state router service."""
-        from .langgraph_state_router import LLMEnhancedStateRouter
-
-        # Check if LLM service is available in the registry
-        if "llm_service" in self.registry._instances:
-            llm_service = self.registry._instances["llm_service"]
-            return LLMEnhancedStateRouter(llm_service=llm_service)
-        else:
-            # Fallback to default if LLM service not available yet
-            logger.warning("LLM service not available for langgraph_state_router, using default")
-            return LLMEnhancedStateRouter()
+            return MockStatefulPipeline()
 
     def _create_cultural_context(self):
         """Create cultural context service."""
         try:
-            from .llm_cultural_context import RwandaCulturalManager, ResponseApproachManager, ConversationContextManager
-
             class CulturalContextService:
                 """Wrapper class for cultural context functionality."""
 
@@ -348,20 +331,16 @@ class ServiceContainer:
     def _create_llm_safety(self):
         """Create LLM safety service."""
         try:
-            from .llm_safety import SafetyManager, GuardrailsManager
-
             class LLMSafety:
                 """Wrapper class for LLM safety functionality."""
 
                 def __init__(self):
                     self.safety_manager = SafetyManager()
-                    self.guardrails_manager = None
 
                 def initialize(self, chat_model=None):
                     """Initialize the safety service."""
                     try:
-                        if chat_model:
-                            self.guardrails_manager = GuardrailsManager(chat_model)
+                        # Safety manager doesn't need chat model initialization
                         return True
                     except Exception as e:
                         logger.warning(f"Failed to initialize LLM safety: {e}")
@@ -379,11 +358,9 @@ class ServiceContainer:
                     """Classify user intent."""
                     return self.safety_manager.classify_intent(user_message)
 
-                async def check_guardrails(self, message: str) -> Optional[str]:
-                    """Check message against guardrails."""
-                    if self.guardrails_manager:
-                        return await self.guardrails_manager.check_guardrails(message)
-                    return None
+                async def check_safety(self, message: str) -> Optional[str]:
+                    """Check message safety and return appropriate response if needed."""
+                    return self.safety_manager.check_safety(message)
 
                 def health_check(self) -> bool:
                     """Check if LLM safety service is healthy."""

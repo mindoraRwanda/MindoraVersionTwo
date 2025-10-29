@@ -12,7 +12,6 @@ from unittest.mock import Mock, AsyncMock
 from datetime import datetime
 
 from backend.app.services.llm_service import LLMService
-from backend.app.services.query_validator_langgraph import LangGraphQueryValidator
 from tests import TestUtils, TestFixtures
 
 
@@ -108,12 +107,13 @@ def test_query():
     return TestUtils.create_mock_query("I'm feeling anxious today")
 
 
-# LangGraph validator fixture
+# Stateful pipeline fixture
 @pytest.fixture
-async def langgraph_validator(mock_llm_provider):
-    """Create a LangGraph validator with mock LLM provider."""
-    validator = LangGraphQueryValidator(llm_provider=mock_llm_provider)
-    return validator
+async def stateful_pipeline(mock_llm_provider):
+    """Create a stateful pipeline with mock LLM provider."""
+    from backend.app.services.stateful_pipeline import StatefulMentalHealthPipeline
+    pipeline = StatefulMentalHealthPipeline(llm_provider=mock_llm_provider)
+    return pipeline
 
 
 # Database mock fixture

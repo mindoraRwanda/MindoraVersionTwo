@@ -203,7 +203,14 @@ Return only a JSON object with this exact structure:
         "surprise": 0.0,
         "disgust": 0.0,
         "neutral": 1.0,
-        "anxiety": 0.0
+        "anxiety": 0.0,
+        "stress": 0.0,
+        "overwhelmed": 0.0,
+        "frustrated": 0.0,
+        "lonely": 0.0,
+        "hopeless": 0.0,
+        "worried": 0.0,
+        "scared": 0.0
     },
     "reasoning": "Explanation of detected emotions",
     "intensity": "low|medium|high|very_high",

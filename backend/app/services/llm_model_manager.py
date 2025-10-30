@@ -2,8 +2,8 @@ import requests
 from typing import Optional
 from langchain_ollama import ChatOllama
 # Use the compatibility layer for gradual migration
-from backend.app.settings.settings import settings
-from backend.app.prompts.system_prompts import SystemPrompts
+from ..settings.settings import settings
+from ..prompts.system_prompts import SystemPrompts
 
 
 class ModelManager:

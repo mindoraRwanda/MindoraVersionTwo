@@ -1,8 +1,8 @@
 import json
 import logging
 from typing import Dict, Any, Optional, List
-from backend.app.services.llm_providers import LLMProvider
-from backend.app.prompts.cultural_context_prompts import CulturalContextPrompts
+from .llm_providers import LLMProvider
+from ..prompts.cultural_context_prompts import CulturalContextPrompts
 
 logger = logging.getLogger(__name__)
 

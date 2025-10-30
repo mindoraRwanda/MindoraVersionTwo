@@ -1,6 +1,6 @@
 import re
 from typing import Dict, List, Any, Optional
-from backend.app.settings.settings import settings
+from ..settings.settings import settings
 
 
 class SafetyManager:

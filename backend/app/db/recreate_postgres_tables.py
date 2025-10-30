@@ -8,8 +8,8 @@ import sys
 import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
 
-from backend.app.db.models import Base
-from backend.app.db.database import engine
+from ..db.models import Base
+from ..db.database import engine
 from sqlalchemy import text
 
 def recreate_tables():

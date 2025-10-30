@@ -14,7 +14,7 @@ import os
 # Add the backend directory to the Python path
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..'))
 
-from backend.app.db.database import DATABASE_URL
+from ..db.database import DATABASE_URL
 
 def add_gender_column():
     """Add gender column to users table."""

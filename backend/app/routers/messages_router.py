@@ -10,10 +10,10 @@ from ..db.database import SessionLocal
 from ..db.models import Conversation, Message, User, EmotionLog
 from ..auth.schemas import MessageCreate, MessageOut
 # Removed: unified_conversation_workflow (consolidated into stateful_pipeline)
-from backend.app.services.stateful_pipeline import StatefulMentalHealthPipeline
+from ..services.stateful_pipeline import StatefulMentalHealthPipeline
 
 # Import the new stateful conversation system
-from backend.app.services.session_state_manager import session_manager
+from ..services.session_state_manager import session_manager
 
 # Import service container for dependency injection
 def get_llm_service():

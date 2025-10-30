@@ -23,8 +23,8 @@ from sqlalchemy.dialects.postgresql import UUID
 backend_dir = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(backend_dir))
 
-from backend.app.settings.settings import settings
-from backend.app.db.models import Base, User, Conversation, Message, EmotionLog
+from ..settings.settings import settings
+from ..db.models import Base, User, Conversation, Message, EmotionLog
 
 
 def run_migration():

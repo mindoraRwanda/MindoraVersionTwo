@@ -19,17 +19,18 @@ def get_db():
     finally:
         db.close()
 
-def get_llm_service():
-    from backend.app.main import llm_service
-    if not llm_service:
-        raise HTTPException(status_code=503, detail="LLM service not initialized.")
-    return llm_service
-
 def get_query_validator():
-    from backend.app.main import query_validator
-    if not query_validator:
-        raise HTTPException(status_code=503, detail="Query validator not initialized.")
-    return query_validator
+    """Get query validator - creates a new instance with LLM provider from service container."""
+    from backend.app.services.service_container import get_service
+    try:
+        llm_provider = get_service("llm_provider")
+        if not llm_provider:
+            raise HTTPException(status_code=503, detail="LLM provider not available for query validator.")
+        return LangGraphQueryValidator(llm_provider=llm_provider)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=f"Query validator not initialized: {e}")
 
 # lazy load a single Whisper model
 MODEL_SIZE = os.getenv("WHISPER_MODEL", "small")
@@ -50,7 +51,6 @@ async def voice_message(
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
-    llm_service = Depends(get_llm_service),
     query_validator: LangGraphQueryValidator = Depends(get_query_validator),
 ):
     # save upload
@@ -96,7 +96,6 @@ async def voice_message(
         background=background,
         db=db,
         user=user,
-        llm_service=llm_service,
         query_validator=query_validator,
         input_modality="voice",
         input_meta=input_meta,

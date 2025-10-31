@@ -23,14 +23,18 @@ from contextlib import asynccontextmanager
 from ..settings.settings import settings
 from .llm_database_operations import DatabaseManager as LLMDatabaseOperations # Renamed to avoid conflict
 from .session_state_manager import SessionStateManager, session_manager
-from .llm_service import LLMService
-# Legacy crisis_interceptor removed - using stateful pipeline instead
+from .llm_providers import LLMProviderFactory
 from .emotion_classifier import LLMEmotionClassifier, initialize_emotion_classifier, classify_emotion_sync
 from .unified_rag_service import UnifiedRAGService, create_unified_rag_service
 from .stateful_pipeline import StatefulMentalHealthPipeline
 from .llm_cultural_context import RwandaCulturalManager, ResponseApproachManager, ConversationContextManager
 from .llm_safety import SafetyManager
-from .crisis_alert_service_temporary import CrisisAlertService
+
+# Try to import CrisisAlertService, fallback to None if not available
+try:
+    from .crisis_alert_service_temporary import CrisisAlertService
+except ImportError:
+    CrisisAlertService = None
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -123,11 +127,18 @@ class ServiceContainer:
 
         # Crisis detection now handled by stateful pipeline
 
+        # LLM Provider service (core dependency for other services)
+        self.registry.register_service(
+            "llm_provider",
+            lambda: self._create_llm_provider(),
+            ServiceConfig("llm_provider", [], required=True)
+        )
+
         # Emotion classification (LLM-powered standalone API)
         self.registry.register_service(
             "emotion_classifier",
             lambda: self._create_emotion_classifier(),
-            ServiceConfig("emotion_classifier", ["llm_service"], required=False)
+            ServiceConfig("emotion_classifier", ["llm_provider"], required=False)
         )
 
         # Unified RAG service
@@ -135,13 +146,6 @@ class ServiceContainer:
             "unified_rag_service",
             lambda: self._create_unified_rag_service(),
             ServiceConfig("unified_rag_service", [], required=False)
-        )
-
-        # LLM services (depends on RAG)
-        self.registry.register_service(
-            "llm_service",
-            lambda: self._create_llm_service(),
-            ServiceConfig("llm_service", ["llm_config", "unified_rag_service"], required=True)
         )
 
         # Crisis alert service
@@ -157,7 +161,7 @@ class ServiceContainer:
         self.registry.register_service(
             "stateful_pipeline",
             lambda: self._create_stateful_pipeline(),
-            ServiceConfig("stateful_pipeline", ["llm_service", "unified_rag_service"], required=True)
+            ServiceConfig("stateful_pipeline", ["llm_provider", "unified_rag_service"], required=True)
         )
 
         # Cultural context
@@ -190,20 +194,18 @@ class ServiceContainer:
         """Create session state manager."""
         return session_manager
 
-    def _create_llm_service(self):
-        """Create LLM service."""
-        llm_service = LLMService(use_vllm=False, provider_name=os.getenv("PROVIDER"), model_name=os.getenv("MODEL_NAME"))
-        
-        # Inject RAG service if available
+    def _create_llm_provider(self):
+        """Create LLM provider directly."""
         try:
-            rag_service = self.get_service("unified_rag_service")
-            if rag_service:
-                llm_service.set_rag_service(rag_service)
-                logger.info("🔍 RAG service injected into LLM service")
+            provider = LLMProviderFactory.create_provider(
+                provider_name=os.getenv("PROVIDER"),
+                model_name=os.getenv("MODEL_NAME", "HuggingFaceTB/SmolLM3-3B")
+            )
+            logger.info(f"✅ LLM provider '{provider.provider_name}' created successfully")
+            return provider
         except Exception as e:
-            logger.warning(f"Failed to inject RAG service into LLM service: {e}")
-        
-        return llm_service
+            logger.error(f"Failed to create LLM provider: {e}")
+            raise
 
 
     # Legacy crisis interceptor creation method removed
@@ -211,14 +213,14 @@ class ServiceContainer:
     def _create_emotion_classifier(self):
         """Create LLM-powered emotion classifier service."""
         try:
-            # Get LLM service for emotion classification
-            llm_service = self.get_service("llm_service")
-            if not llm_service:
-                logger.warning("LLM service not available for emotion classifier")
+            # Get LLM provider for emotion classification
+            llm_provider = self.get_service("llm_provider")
+            if not llm_provider:
+                logger.warning("LLM provider not available for emotion classifier")
                 return None
             
             # Create LLM emotion classifier
-            emotion_classifier = LLMEmotionClassifier(llm_service.llm_provider)
+            emotion_classifier = LLMEmotionClassifier(llm_provider)
             logger.info("🧠 LLM-powered emotion classifier created successfully")
             return emotion_classifier
             
@@ -242,6 +244,9 @@ class ServiceContainer:
 
     def _create_crisis_alert_service(self):
         """Create crisis alert service."""
+        if CrisisAlertService is None:
+            logger.warning("CrisisAlertService not available, skipping creation")
+            return None
         try:
             crisis_alert_service = CrisisAlertService()
             logger.info("🚨 Crisis alert service created successfully")
@@ -253,24 +258,25 @@ class ServiceContainer:
     def _create_stateful_pipeline(self):
         """Create stateful mental health pipeline service."""
         try:
-            # Check if LLM service is available in the registry
-            if "llm_service" in self.registry._instances:
-                llm_service = self.registry._instances["llm_service"]
-                
-                # Get RAG service if available
-                rag_service = None
-                if "unified_rag_service" in self.registry._instances:
-                    rag_service = self.registry._instances["unified_rag_service"]
-                    logger.info("🔍 RAG service injected into stateful pipeline")
-                
-                return StatefulMentalHealthPipeline(
-                    llm_provider=llm_service.llm_provider,
-                    rag_service=rag_service
-                )
-            else:
-                # Fallback to default if LLM service not available yet
-                logger.warning("LLM service not available for stateful_pipeline, using default")
+            # Get LLM provider
+            llm_provider = self.get_service("llm_provider")
+            if not llm_provider:
+                logger.warning("LLM provider not available for stateful_pipeline, using default")
                 return StatefulMentalHealthPipeline()
+            
+            # Get RAG service if available
+            rag_service = None
+            try:
+                rag_service = self.get_service("unified_rag_service")
+                if rag_service:
+                    logger.info("🔍 RAG service injected into stateful pipeline")
+            except Exception:
+                logger.info("RAG service not available, continuing without it")
+            
+            return StatefulMentalHealthPipeline(
+                llm_provider=llm_provider,
+                rag_service=rag_service
+            )
         except ImportError as e:
             logger.warning(f"Stateful pipeline not available: {e}")
             # Return a mock service

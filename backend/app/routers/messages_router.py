@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
 import bleach
 import time
 import json
@@ -16,13 +16,6 @@ from backend.app.services.stateful_pipeline import StatefulMentalHealthPipeline
 from backend.app.services.session_state_manager import session_manager
 
 # Import service container for dependency injection
-def get_llm_service():
-    """Get LLM service from service container."""
-    from ..services.service_container import get_service
-    return get_service("llm_service")
-
-# Removed: get_unified_workflow (consolidated into stateful_pipeline)
-
 def get_stateful_pipeline():
     """Get stateful mental health pipeline from service container."""
     from ..services.service_container import get_service
@@ -30,9 +23,12 @@ def get_stateful_pipeline():
         return get_service("stateful_pipeline")
     except Exception:
         # Fallback to creating a new instance
-        from ..services.stateful_pipeline import initialize_stateful_pipeline
-        llm_service = get_service("llm_service")
-        return initialize_stateful_pipeline(llm_provider=llm_service.llm_provider if llm_service else None)
+        from ..services.stateful_pipeline import StatefulMentalHealthPipeline
+        try:
+            llm_provider = get_service("llm_provider")
+            return StatefulMentalHealthPipeline(llm_provider=llm_provider)
+        except Exception:
+            return StatefulMentalHealthPipeline()
 
 router = APIRouter(prefix="/auth", tags=["Messages"])
 
@@ -240,4 +236,29 @@ def get_context_window(
     ]
 
     return list(reversed(messages))  # return oldest → newest
+
+
+# Placeholder function for voice_router compatibility
+async def process_clean_message(
+    clean_content: str,
+    conversation_id: int,
+    background: BackgroundTasks,
+    db: Session,
+    user: User,
+    query_validator,
+    input_modality: str = "text",
+    input_meta: dict = None
+):
+    """
+    Placeholder function for processing cleaned messages from voice router.
+    
+    This function is not yet implemented and will return a 501 Not Implemented error.
+    The voice router should be updated to use the stateful pipeline directly like the 
+    regular message endpoint does.
+    """
+    from fastapi import HTTPException
+    raise HTTPException(
+        status_code=501,
+        detail="Voice message processing is not yet implemented. Please use the regular /auth/messages endpoint instead."
+    )
 

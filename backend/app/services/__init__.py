@@ -2,7 +2,8 @@
 Services package for the Mindora mental health chatbot.
 
 This package provides all the core services for the chatbot including:
-- LLM services for response generation
+- LLM provider for model access
+- Stateful pipeline for message processing
 - Session management for conversation state
 - Crisis detection and intervention
 - Query validation and processing
@@ -16,11 +17,11 @@ Usage:
     await service_container.initialize_all_services()
 
     # Get a specific service
-    llm_service = get_service("llm_service")
+    stateful_pipeline = get_service("stateful_pipeline")
     session_manager = get_service("session_manager")
 
     # Use the services
-    response = await llm_service.generate_response(messages)
+    result = await stateful_pipeline.process_query(query, user_id, conversation_history)
 
     # Cleanup when done
     await service_container.shutdown_all_services()

@@ -1,18 +1,8 @@
-from sqlalchemy import Column, Integer, Text, ForeignKey, TIMESTAMP, String
-from sqlalchemy.orm import relationship
-from datetime import datetime
-from .database import Base
-
-
-from sqlalchemy.orm import relationship
-from sqlalchemy.dialects.postgresql import JSONB
-import enum
-from .database import Base
 from sqlalchemy import (
-    Column, Integer, String, Text, ForeignKey, TIMESTAMP, Enum, Boolean, Float, func, UniqueConstraint
+    Column, Integer, String, Text, ForeignKey, TIMESTAMP, Enum, Boolean, Float, func, UniqueConstraint, JSON
 )
 from sqlalchemy.orm import relationship
-from sqlalchemy.dialects.postgresql import JSONB
+from .database import Base
 import enum
 
 # ----- enums -----
@@ -90,7 +80,7 @@ class Conversation(Base):
     started_at = Column(TIMESTAMP, server_default=func.now())
     last_activity_at = Column(TIMESTAMP, server_default=func.now(), onupdate=func.now())
     # Optional: store small per-convo metadata
-    meta = Column(JSONB, server_default="{}")
+    meta = Column(JSON, server_default="{}")
 
     user = relationship("User", back_populates="conversations")
     messages = relationship("Message", back_populates="conversation", cascade="all, delete-orphan")
@@ -105,7 +95,7 @@ class Message(Base):
     content = Column(Text, nullable=False)
     timestamp = Column(TIMESTAMP, server_default=func.now(), index=True)
     # Flexible per-message metadata (e.g., safety flags, embeddings ids, etc.)
-    meta = Column(JSONB, server_default="{}")
+    meta = Column(JSON, server_default="{}")
 
     conversation = relationship("Conversation", back_populates="messages")
 
@@ -145,7 +135,7 @@ class CrisisLog(Base):
     acknowledged_at = Column(TIMESTAMP, nullable=True)
     resolved_at = Column(TIMESTAMP, nullable=True)
 
-    extra = Column(JSONB, server_default="{}")  # arbitrary extra fields
+    extra = Column(JSON, server_default="{}")  # arbitrary extra fields
     created_at = Column(TIMESTAMP, server_default=func.now(), index=True)
 
     user = relationship("User", back_populates="crisis_logs")

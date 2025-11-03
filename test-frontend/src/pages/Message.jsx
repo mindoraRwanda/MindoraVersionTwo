@@ -10,9 +10,31 @@ const Message = ({ message, isUser }) => {
     }
 
     // Check if content contains thinking tags (handle both HTML-encoded and regular tags)
-    const thinkBlockPattern =
-      /(&lt;think&gt;|<think>)[\s\S]*?(&lt;\/think&gt;|<\/think>)/gi;
-    const thinkPattern = /(&lt;think&gt;|&lt;\/think&gt;|<think>|<\/think>)/gi;
+    // Patterns to match various thinking tag formats:
+    // - HTML-encoded: &lt;think&gt;, &lt;THINK&gt;, etc.
+    // - Regular: <think>, <THINK>, <think >, etc.
+    // - With optional whitespace and different capitalizations
+    // - Variations: <thinking>, <thought>, etc.
+
+    // Pattern to match think start tags (HTML-encoded and regular, various cases, with optional whitespace)
+    // Matches: &lt;think&gt;, &lt;think &gt;, &lt;THINK&gt;, &lt;Think&gt;, &lt;thinking&gt;, <think>, <think >, <THINK>, <Think>, <thinking>, etc.
+    const thinkStartStr =
+      "(&lt;think\\s*&gt;|&lt;THINK\\s*&gt;|&lt;Think\\s*&gt;|&lt;thinking\\s*&gt;|&lt;THINKING\\s*&gt;|&lt;Thought\\s*&gt;|&lt;THOUGHT\\s*&gt;|<think\\s*>|<THINK\\s*>|<Think\\s*>|<thinking\\s*>|<THINKING\\s*>|<thought\\s*>|<THOUGHT\\s*>)";
+
+    // Pattern to match think end tags
+    // Matches: &lt;/think&gt;, &lt;/think &gt;, &lt;/THINK&gt;, &lt;/Think&gt;, &lt;/thinking&gt;, </think>, </think >, </THINK>, </Think>, </thinking>, etc.
+    const thinkEndStr =
+      "(&lt;\\/think\\s*&gt;|&lt;\\/THINK\\s*&gt;|&lt;\\/Think\\s*&gt;|&lt;\\/thinking\\s*&gt;|&lt;\\/THINKING\\s*&gt;|&lt;\\/Thought\\s*&gt;|&lt;\\/THOUGHT\\s*&gt;|<\\/think\\s*>|<\\/THINK\\s*>|<\\/Think\\s*>|<\\/thinking\\s*>|<\\/THINKING\\s*>|<\\/thought\\s*>|<\\/THOUGHT\\s*>)";
+
+    // Combined pattern to match complete think blocks (start tag, content, end tag)
+    const thinkBlockPattern = new RegExp(
+      thinkStartStr + "[\\s\\S]*?" + thinkEndStr,
+      "gi"
+    );
+
+    // Pattern to match standalone think tags (start or end)
+    const thinkPattern = new RegExp(thinkStartStr + "|" + thinkEndStr, "gi");
+
     const hasThinking = thinkBlockPattern.test(message.content);
 
     // Remove thinking tags from content

@@ -8,7 +8,7 @@ import os
 from pathlib import Path
 
 # Add the backend directory to the Python path
-backend_dir = Path(__file__).parent
+backend_dir = Path(__file__).parent.parent / "backend"
 sys.path.insert(0, str(backend_dir))
 sys.path.insert(0, str(backend_dir / "app"))
 
@@ -125,10 +125,9 @@ def test_service_initialization():
         # Test that service container is set up
         print(f"✅ Service container created: {type(service_container)}")
         
-        # Test that compatibility layer is accessible
-        from app.settings.compatibility import compatibility_layer
-        model_config = compatibility_layer.get_model_config()
-        print(f"✅ Model config accessible: {model_config.default_model_name}")
+        # Test that settings are accessible
+        from app.settings import settings
+        print(f"✅ Settings accessible: {settings.environment}")
         
         return True
     except Exception as e:

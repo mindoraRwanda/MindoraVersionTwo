@@ -119,7 +119,6 @@ class StatefulMentalHealthPipeline:
             self._route_after_validation,
             {
                 "crisis_detection": "crisis_detection",
-                "generate_response": "generate_response",
                 "end": END
             }
         )
@@ -201,10 +200,6 @@ class StatefulMentalHealthPipeline:
         if validation.is_random:
             logger.info(f"🔄 Query marked as random (confidence: {validation.query_confidence:.2f}), ending pipeline")
             return "end"
-
-        if validation.query_type in [QueryType.GREETING, QueryType.CASUAL]:
-            logger.info(f"🔄 Query is a {validation.query_type.value}, routing to generate_response")
-            return "generate_response"
         
         logger.info(f"✅ Query validated as mental health related (confidence: {validation.query_confidence:.2f}), proceeding to crisis detection")
         return "crisis_detection"
@@ -212,6 +207,7 @@ class StatefulMentalHealthPipeline:
     def _route_after_crisis(self, state: StatefulPipelineState) -> str:
         """Route after crisis detection based on severity."""
         crisis = state.get("crisis_assessment")
+        logger.info("🔍 Evaluating crisis assessment for routing...")
         if not crisis:
             logger.info("🔄 No crisis assessment found, proceeding to emotion detection")
             return "emotion_detection"

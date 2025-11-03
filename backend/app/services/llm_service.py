@@ -14,7 +14,6 @@ from .llm_cultural_context import (
 from .llm_providers import LLMProviderFactory, create_llm_provider
 from .llm_database_operations import DatabaseManager
 from .unified_rag_service import UnifiedRAGService
-# Legacy emotion_classifier import removed - using stateful pipeline instead
 
 
 class LLMService:
@@ -200,16 +199,17 @@ class LLMService:
 
         # Build context parts
         context_parts = []
+        
         if memory_block.strip():
             context_parts.append(f"Previous conversation context:\n{memory_block}")
         else:
             context_parts.append("This appears to be a new conversation.")
 
-        if suicide_flag:
-            context_parts.append("⚠️ CRISIS INDICATOR: Suicide risk detected - prioritize safety and professional referral")
+        # if suicide_flag:
+        #     context_parts.append("⚠️ CRISIS INDICATOR: Suicide risk detected - prioritize safety and professional referral")
 
-        if meds_mentioned:
-            context_parts.append(f"📋 Medications mentioned: {', '.join(meds_mentioned)} - be mindful of medication safety")
+        # if meds_mentioned:
+        #     context_parts.append(f"📋 Medications mentioned: {', '.join(meds_mentioned)} - be mindful of medication safety")
 
         if retrieved_text:
             context_parts.append(f"Relevant knowledge: {retrieved_text[:500]}")

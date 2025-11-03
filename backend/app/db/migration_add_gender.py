@@ -12,15 +12,13 @@ import sys
 import os
 
 # Add the backend directory to the Python path
-sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..'))
+backend_dir = os.path.join(os.path.dirname(__file__), '..', '..')
+sys.path.insert(0, backend_dir)
 
-from ..db.database import DATABASE_URL
+from app.db.database import engine
 
 def add_gender_column():
     """Add gender column to users table."""
-
-    # Create engine
-    engine = create_engine(DATABASE_URL)
 
     # Create a base for the migration
     Base = declarative_base()

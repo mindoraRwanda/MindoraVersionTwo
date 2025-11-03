@@ -27,44 +27,6 @@ from ..prompts.safety_prompts import SafetyPrompts
 from ..prompts.response_approach_prompts import ResponseApproachPrompts
 from .crisis_classifier import classify_crisis
 from .safety_pipeline import log_crisis_and_notify
-from pydantic import BaseModel, Field
-
-
-class QueryValidationOutput(BaseModel):
-    """Pydantic model for query validation output."""
-    confidence: float = Field(..., description="Confidence score (0-1) on whether the query is mental health related.")
-    keywords: List[str] = Field(..., description="Keywords indicating mental health content.")
-    reasoning: str = Field(..., description="Reasoning for the classification.")
-    is_random: bool = Field(..., description="Whether the query is random/off-topic.")
-    query_type: str = Field(..., description="Type of query, e.g., 'mental_health'.")
-    cultural_indicators: List[str] = Field([], description="Cultural context considerations in the query.")
-
-class CrisisDetectionOutput(BaseModel):
-    """Pydantic model for crisis detection output."""
-    is_crisis: bool = Field(..., description="Is crisis present? (true/false)")
-    crisis_confidence: float = Field(..., description="Crisis confidence score (0-1)")
-    crisis_keywords: List[str] = Field(..., description="Crisis keywords found (including cultural expressions)")
-    crisis_reason: str = Field(..., description="Reasoning for assessment")
-    crisis_severity: str = Field(..., description="crisis_severity level: severe, high, medium, low, none")
-
-class EmotionDetectionOutput(BaseModel):
-    """Pydantic model for emotion detection output."""
-    emotions: Dict[str, float] = Field(..., description="Dictionary of emotions and their confidence scores.")
-    keywords: List[str] = Field(..., description="List of emotion keywords (including cultural expressions)")
-    reasoning: str = Field(..., description="Reasoning for emotion detection")
-    selected_emotion: str = Field(..., description="The primary detected emotion.")
-    confidence: float = Field(..., description="Confidence score for the selected emotion.")
-    cultural_emotional_indicators: List[str] = Field([], description="Cultural emotional expression patterns")
-    youth_emotional_patterns: List[str] = Field([], description="Youth-specific emotional language")
-
-class QueryEvaluationOutput(BaseModel):
-    """Pydantic model for query evaluation output."""
-    confidence: float = Field(..., description="Confidence in the chosen strategy.")
-    reasoning: str = Field(..., description="Reasoning for the strategy selection.")
-    keywords: List[str] = Field(..., description="Keywords that influenced the decision.")
-    strategy: str = Field(..., description="The selected response strategy.")
-    cultural_considerations: List[str] = Field([], description="Cultural considerations for strategy selection.")
-    cultural_appropriateness: str = Field("medium", description="Level of cultural appropriateness (high, medium, low).")
 
 logger = logging.getLogger(__name__)
 
@@ -84,100 +46,22 @@ class BasePipelineNode(ABC):
         """Execute the node's processing logic."""
         pass
     
-    async def _call_llm(self, system_prompt: str, user_prompt: str, state: StatefulPipelineState, structured_output: Optional[Any] = None) -> Any:
-        """Make LLM call with error handling and optional structured output."""
+    async def _call_llm(self, system_prompt: str, user_prompt: str, state: StatefulPipelineState) -> str:
+        """Make LLM call with error handling."""
         try:
             logger.info(f"🤖 Making LLM call with {len(system_prompt)} char system prompt, {len(user_prompt)} char user prompt")
             system_message = SystemMessage(content=system_prompt)
             human_message = HumanMessage(content=user_prompt)
-            
-            response = await self.llm_provider.agenerate(
-                [system_message, human_message], 
-                structured_output=structured_output
-            )
-            
+            response = await self.llm_provider.agenerate([system_message, human_message])
             increment_llm_calls(state)
-            
-            if structured_output:
-                logger.info(f"✅ LLM call successful, structured output received.")
-            else:
-                response_str = str(response)
-                logger.info(f"✅ LLM call successful, response length: {len(response_str)} chars")
-            
+            logger.info(f"✅ LLM call successful, response length: {len(response)} chars")
             return response
         except Exception as e:
             logger.error(f"❌ LLM call failed: {e}")
             add_error(state, f"LLM call error: {str(e)}")
-            return None
+            return ""
 
-    async def _generate_response(
-        self, 
-        state: StatefulPipelineState, 
-        node_name: str, 
-        system_prompt_template: str, 
-        user_prompt_template: str
-    ) -> StatefulPipelineState:
-        """Generic response generation method."""
-        start_time = time.time()
-        query = state["user_query"]
-        emotion = state.get("emotion_detection")
-        
-        logger.info(f"Executing {node_name} for query: '{query[:100]}{'...' if len(query) > 100 else ''}'")
-        
-        try:
-            cultural_context = self._get_cultural_context(state)
-            language = cultural_context["language"]
-            
-            cultural_prompt = self._apply_cultural_integration(state, f"{node_name}_response")
-            
-            gender_addressing = self._get_gender_aware_addressing(state)
-            
-            knowledge_context = state.get("knowledge_context", "")
-            rag_applied = state.get("rag_enhancement_applied", False)
-            
-            system_prompt = system_prompt_template.format(
-                language=language,
-                cultural_prompt=cultural_prompt,
-                gender_addressing=gender_addressing if gender_addressing else "friend",
-                emotion_responses=cultural_context["emotion_responses"],
-                knowledge_context=f"Relevant Mental Health Knowledge: {knowledge_context}" if rag_applied and knowledge_context else ""
-            )
-            
-            user_prompt = user_prompt_template.format(
-                query=query,
-                emotion=emotion.selected_emotion if emotion else "neutral",
-                language=language,
-                gender_addressing=gender_addressing if gender_addressing else "friend"
-            )
-            
-            logger.info(f"📝 {node_name} prompt prepared (system: {len(system_prompt)} chars)")
-            response = await self._call_llm(system_prompt, user_prompt, state)
-            
-            is_culturally_appropriate = self._validate_cultural_appropriateness(response, state)
-            
-            state["generated_content"] = response
-            state["response_confidence"] = 0.8 if is_culturally_appropriate else 0.6
-            state["response_reason"] = f"Generated {node_name} response with cultural sensitivity (appropriateness: {'high' if is_culturally_appropriate else 'medium'})"
-            
-            processing_time = time.time() - start_time
-            
-            state = add_processing_metadata(
-                state,
-                f"{node_name}_response",
-                0.8,
-                f"Generated {node_name} response with cultural context",
-                [node_name, "support"],
-                processing_time
-            )
-            
-            logger.info(f"✅ {node_name} response generated: {len(response)} chars, confidence=0.8")
-            
-        except Exception as e:
-            logger.error(f"❌ {node_name} response generation failed: {e}")
-            add_error(state, f"{node_name} response error: {str(e)}")
-            state["generated_content"] = "I understand you're going through a difficult time. I'm here to support you."
-        
-        return state
+
 
     def _get_cultural_context(self, state: StatefulPipelineState) -> Dict[str, Any]:
         """Get cultural context for the current state."""
@@ -340,28 +224,28 @@ class QueryValidationNode(BasePipelineNode):
             2. Key keywords that indicate mental health content
             3. Reasoning for your classification
             4. Whether this is random/off-topic (true/false)
-            5. The query_type, which can be one of: 'mental_health', 'crisis', 'random', 'unclear', 'greeting', 'casual'.
-            6. Cultural context considerations in the query
+            5. Cultural context considerations in the query
             
             Consider cultural expressions of mental health concerns that may be indirect or use local terminology.
+            
+            Respond in JSON format:
+            {{
+                "confidence": 0.8,
+                "keywords": ["anxiety", "stress"],
+                "reasoning": "Query contains mental health indicators with cultural context",
+                "is_random": false,
+                "query_type": "mental_health",
+                "cultural_indicators": ["cultural_expression_1", "cultural_expression_2"]
+            }}
             """
             
             user_prompt = f"Classify this query with cultural awareness: '{query}'"
             logger.info(f"📝 Query validation prompt prepared (system: {len(system_prompt)} chars)")
-            response_data = await self._call_llm(system_prompt, user_prompt, state, structured_output=QueryValidationOutput)
-
-            if not response_data:
-                raise Exception("LLM call for query validation failed to return data.")
-
-            # Create validation result from structured output
-            all_keywords = response_data.keywords + response_data.cultural_indicators
-            validation_result = QueryValidationResult(
-                query_confidence=response_data.confidence,
-                query_keywords=all_keywords,
-                query_reason=response_data.reasoning,
-                is_random=response_data.is_random,
-                query_type=QueryType(response_data.query_type)
-            )
+            response = await self._call_llm(system_prompt, user_prompt, state)
+            
+            # Parse response and create validation result
+            logger.info(f"🔍 Parsing validation response: '{response[:200]}{'...' if len(response) > 200 else ''}'")
+            validation_result = self._parse_validation_response(response, query)
             state["query_validation"] = validation_result
             
             processing_time = time.time() - start_time
@@ -393,7 +277,35 @@ class QueryValidationNode(BasePipelineNode):
         
         return state
     
-
+    def _parse_validation_response(self, response: str, query: str) -> QueryValidationResult:
+        """Parse LLM response into structured validation result."""
+        try:
+            # Try to parse JSON response
+            data = json.loads(response)
+            
+            # Extract cultural indicators if present
+            cultural_indicators = data.get("cultural_indicators", [])
+            keywords = data.get("keywords", [])
+            
+            # Combine keywords with cultural indicators
+            all_keywords = keywords + cultural_indicators
+            
+            return QueryValidationResult(
+                query_confidence=float(data.get("confidence", 0.5)),
+                query_keywords=all_keywords,
+                query_reason=data.get("reasoning", "Query analyzed with cultural context"),
+                is_random=bool(data.get("is_random", False)),
+                query_type=QueryType(data.get("query_type", "mental_health"))
+            )
+        except (json.JSONDecodeError, ValueError, KeyError):
+            # Fallback parsing
+            return QueryValidationResult(
+                query_confidence=0.7,
+                query_keywords=["mental", "health", "cultural_context"],
+                query_reason="Query contains mental health indicators with cultural context",
+                is_random=False,
+                query_type=QueryType.MENTAL_HEALTH
+            )
 
 
 class CrisisDetectionNode(BasePipelineNode):
@@ -426,7 +338,7 @@ class CrisisDetectionNode(BasePipelineNode):
             1. Crisis confidence score (0-1)
             2. Crisis keywords found (including cultural expressions)
             3. Reasoning for assessment
-            4. crisis_severity level: severe, high, medium, low, none
+            4. Severity level: severe, high, medium, low, none
             5. Cultural stigma considerations
             6. Indirect crisis communication patterns
             
@@ -437,25 +349,24 @@ class CrisisDetectionNode(BasePipelineNode):
             - National Helpline: {crisis_resources.get('national_helpline', '114')}
             - Emergency: {crisis_resources.get('emergency', '112')}
             - Hospitals: {', '.join(crisis_resources.get('hospitals', []))}
+            
+            Respond in JSON format:
+            {{
+                "is_crisis": true,
+                "crisis_confidence": 0.1,
+                "crisis_keywords": [],
+                "crisis_reason": "No crisis indicators detected with cultural context consideration",
+                "crisis_severity": "none",
+            }}
             """
             
             user_prompt = f"Assess this query for crisis indicators with cultural awareness: '{query}'"
             logger.info(f"📝 Crisis detection prompt prepared (system: {len(system_prompt)} chars)")
-            response_data = await self._call_llm(system_prompt, user_prompt, state, structured_output=CrisisDetectionOutput)
-
-            if not response_data:
-                raise Exception("LLM call for crisis detection failed to return data.")
-
+            response = await self._call_llm(system_prompt, user_prompt, state)
+            
             # Parse response and create crisis assessment
-            logger.info(f"🔍 Parsing crisis detection response: {response_data}")
-            crisis_assessment = CrisisAssessment(
-                is_crisis=response_data.is_crisis,
-                crisis_confidence=response_data.crisis_confidence,
-                crisis_keywords=response_data.crisis_keywords,
-                crisis_reason=response_data.crisis_reason,
-                crisis_severity=CrisisSeverity(response_data.crisis_severity.strip().split(' ')[0])
-            )
-            logger.info(f"🚨 Classified Crisis: {crisis_assessment}")
+            logger.info(f"🔍 Parsing crisis detection response: '{response[:200]}{'...' if len(response) > 200 else ''}'")
+            crisis_assessment = self._parse_crisis_response(response, query)
             state["crisis_assessment"] = crisis_assessment
             
             processing_time = time.time() - start_time
@@ -469,9 +380,10 @@ class CrisisDetectionNode(BasePipelineNode):
                 crisis_assessment.crisis_keywords,
                 processing_time
             )
+
+            state["crisis_assessment"] = crisis_assessment
             
             logger.info(f"✅ Crisis detection completed: is_crisis={crisis_assessment.is_crisis}, severity={crisis_assessment.crisis_severity.value}, confidence={crisis_assessment.crisis_confidence:.2f}, keywords={crisis_assessment.crisis_keywords}")
-            return state
             
         except Exception as e:
             logger.error(f"❌ Crisis detection failed: {e}")
@@ -485,12 +397,37 @@ class CrisisDetectionNode(BasePipelineNode):
                 crisis_reason=f"Fallback assessment due to error: {str(e)}",
                 crisis_severity=CrisisSeverity.NONE
             )
-
-            return state
         
-        
+        return state
     
+    def _parse_crisis_response(self, response: str, query: str) -> CrisisAssessment:
+        """Parse LLM response into structured crisis assessment."""
+        try:
+            data = json.loads(response)
 
+            # Extract cultural considerations and resource recommendations
+            cultural_considerations = data.get("cultural_considerations", [])
+            resource_recommendations = data.get("resource_recommendations", [])
+            keywords = data.get("keywords", [])
+
+            # Combine keywords with cultural considerations
+            all_keywords = keywords + cultural_considerations + resource_recommendations
+
+            return CrisisAssessment(
+                is_crisis=data.get("is_crisis", False),
+                crisis_confidence=float(data.get("crisis_confidence", 0.0)),
+                crisis_keywords=all_keywords,
+                crisis_reason=data.get("reasoning", "Crisis assessment completed with cultural context"),
+                crisis_severity=CrisisSeverity(data.get("crisis_severity", data.get("severity", "none")))
+            )
+        except (json.JSONDecodeError, ValueError, KeyError):
+            return CrisisAssessment(
+                crisis_confidence=0.0,
+                is_crisis=False,
+                crisis_keywords=["cultural_context", "stigma_awareness"],
+                crisis_reason="No crisis indicators detected with cultural context consideration",
+                crisis_severity=CrisisSeverity.NONE
+            )
 
 
 class EmotionDetectionNode(BasePipelineNode):
@@ -534,25 +471,26 @@ class EmotionDetectionNode(BasePipelineNode):
             
             Available emotion response templates for {language}:
             {emotion_responses}
+            
+            Respond in JSON format:
+            {{
+                "emotions": {{"anxiety": 0.7, "neutral": 0.3}},
+                "keywords": ["worried", "anxious", "cultural_expression"],
+                "reasoning": "Query shows anxiety and worry with cultural context",
+                "selected_emotion": "anxiety",
+                "confidence": 0.7,
+                "cultural_emotional_indicators": ["indirect_expression", "family_context"],
+                "youth_emotional_patterns": ["peer_pressure", "academic_stress"]
+            }}
             """
             
             user_prompt = f"Detect emotions in this query with cultural awareness: '{query}'"
             logger.info(f"📝 Emotion detection prompt prepared (system: {len(system_prompt)} chars)")
-            response_data = await self._call_llm(system_prompt, user_prompt, state, structured_output=EmotionDetectionOutput)
-
-            if not response_data:
-                raise Exception("LLM call for emotion detection failed to return data.")
+            response = await self._call_llm(system_prompt, user_prompt, state)
             
             # Parse response and create emotion detection
-            logger.info(f"🔍 Parsing emotion detection response: '{response_data}'")
-            all_keywords = response_data.keywords + response_data.cultural_emotional_indicators + response_data.youth_emotional_patterns
-            emotion_detection = EmotionDetection(
-                emotions=response_data.emotions,
-                emotion_keywords=all_keywords,
-                emotion_reason=response_data.reasoning,
-                selected_emotion=response_data.selected_emotion,
-                emotion_confidence=response_data.confidence
-            )
+            logger.info(f"🔍 Parsing emotion detection response: '{response[:200]}{'...' if len(response) > 200 else ''}'")
+            emotion_detection = self._parse_emotion_response(response, query)
             state["emotion_detection"] = emotion_detection
             
             processing_time = time.time() - start_time
@@ -584,7 +522,34 @@ class EmotionDetectionNode(BasePipelineNode):
         
         return state
     
-
+    def _parse_emotion_response(self, response: str, query: str) -> EmotionDetection:
+        """Parse LLM response into structured emotion detection."""
+        try:
+            data = json.loads(response)
+            
+            # Extract cultural emotional indicators and youth patterns
+            cultural_indicators = data.get("cultural_emotional_indicators", [])
+            youth_patterns = data.get("youth_emotional_patterns", [])
+            keywords = data.get("keywords", [])
+            
+            # Combine keywords with cultural elements
+            all_keywords = keywords + cultural_indicators + youth_patterns
+            
+            return EmotionDetection(
+                emotions=data.get("emotions", {"neutral": 1.0}),
+                emotion_keywords=all_keywords,
+                emotion_reason=data.get("reasoning", "Emotion detection completed with cultural context"),
+                selected_emotion=data.get("selected_emotion", "neutral"),
+                emotion_confidence=float(data.get("confidence", 0.5))
+            )
+        except (json.JSONDecodeError, ValueError, KeyError):
+            return EmotionDetection(
+                emotions={"neutral": 1.0},
+                emotion_keywords=["cultural_context", "youth_patterns"],
+                emotion_reason="Emotion detection completed with cultural context",
+                selected_emotion="neutral",
+                emotion_confidence=0.5
+            )
 
 
 class QueryEvaluationNode(BasePipelineNode):
@@ -630,6 +595,16 @@ class QueryEvaluationNode(BasePipelineNode):
             - Cultural stigma may influence how users express needs
             - Ubuntu philosophy emphasizes community support
             - Gender-aware addressing may be appropriate
+            
+            Respond in JSON format:
+            {{
+                "confidence": 0.8,
+                "reasoning": "User needs emotional support with cultural context consideration",
+                "keywords": ["support", "help", "cultural_appropriateness"],
+                "strategy": "GIVE_EMPATHY",
+                "cultural_considerations": ["indirect_communication", "family_context"],
+                "cultural_appropriateness": "high"
+            }}
             """
             
             user_prompt = f"""
@@ -642,20 +617,11 @@ class QueryEvaluationNode(BasePipelineNode):
             """
             
             logger.info(f"📝 Query evaluation prompt prepared (system: {len(system_prompt)} chars)")
-            response_data = await self._call_llm(system_prompt, user_prompt, state, structured_output=QueryEvaluationOutput)
-
-            if not response_data:
-                raise Exception("LLM call for query evaluation failed to return data.")
+            response = await self._call_llm(system_prompt, user_prompt, state)
             
             # Parse response and create evaluation
-            logger.info(f"🔍 Parsing query evaluation response: '{response_data}'")
-            all_keywords = response_data.keywords + response_data.cultural_considerations + [f"cultural_appropriateness_{response_data.cultural_appropriateness}"]
-            query_evaluation = QueryEvaluation(
-                evaluation_confidence=response_data.confidence,
-                evaluation_reason=response_data.reasoning,
-                evaluation_keywords=all_keywords,
-                evaluation_type=ResponseStrategy(response_data.strategy)
-            )
+            logger.info(f"🔍 Parsing query evaluation response: '{response[:200]}{'...' if len(response) > 200 else ''}'")
+            query_evaluation = self._parse_evaluation_response(response, query)
             state["query_evaluation"] = query_evaluation
             
             processing_time = time.time() - start_time
@@ -686,7 +652,32 @@ class QueryEvaluationNode(BasePipelineNode):
         
         return state
     
-
+    def _parse_evaluation_response(self, response: str, query: str) -> QueryEvaluation:
+        """Parse LLM response into structured query evaluation."""
+        try:
+            data = json.loads(response)
+            
+            # Extract cultural considerations and appropriateness
+            cultural_considerations = data.get("cultural_considerations", [])
+            cultural_appropriateness = data.get("cultural_appropriateness", "medium")
+            keywords = data.get("keywords", [])
+            
+            # Combine keywords with cultural elements
+            all_keywords = keywords + cultural_considerations + [f"cultural_appropriateness_{cultural_appropriateness}"]
+            
+            return QueryEvaluation(
+                evaluation_confidence=float(data.get("confidence", 0.5)),
+                evaluation_reason=data.get("reasoning", "Query evaluation completed with cultural context"),
+                evaluation_keywords=all_keywords,
+                evaluation_type=ResponseStrategy(data.get("strategy", "GIVE_EMPATHY"))
+            )
+        except (json.JSONDecodeError, ValueError, KeyError):
+            return QueryEvaluation(
+                evaluation_confidence=0.5,
+                evaluation_reason="Query evaluation completed with cultural context",
+                evaluation_keywords=["cultural_context", "cultural_appropriateness_medium"],
+                evaluation_type=ResponseStrategy.GIVE_EMPATHY
+            )
 
 
 # Specialized Response Nodes
@@ -696,40 +687,92 @@ class EmpathyNode(BasePipelineNode):
     
     async def execute(self, state: StatefulPipelineState) -> StatefulPipelineState:
         """Generate empathetic response with cultural context."""
-        system_prompt_template = """
-            You are generating an empathetic response with cultural awareness for {language} speakers.
-            
-            {cultural_prompt}
-            
-            Generate a culturally sensitive, supportive response that:
-            1. Uses appropriate cultural expressions and terminology
-            2. Incorporates Ubuntu philosophy ("I am because we are")
-            3. Shows understanding of family and community context
-            4. Uses gender-aware addressing: {gender_addressing}
-            5. Considers cultural stigma around mental health
-            6. Provides hope and community support
-            
-            Available emotion response templates for {language}:
-            {emotion_responses}
-            
-            {knowledge_context}
-            
-            Make the response feel authentic and relatable to Rwandan youth.
-            Keep your response concise and to the point, ideally under 3 sentences.
-            Use the available knowledge to provide informed, evidence-based support while maintaining cultural sensitivity.
-            """
+        start_time = time.time()
+        query = state["user_query"]
+        emotion = state.get("emotion_detection")
         
-        user_prompt_template = """
+        logger.info(f"💝 Starting empathy response generation for query: '{query[:100]}{'...' if len(query) > 100 else ''}'")
+        logger.info(f"😊 Detected emotion: {emotion.selected_emotion if emotion else 'neutral'}")
+        
+        try:
+            # Get cultural context for empathy response
+            cultural_context = self._get_cultural_context(state)
+            language = cultural_context["language"]
+            emotion_responses = cultural_context["emotion_responses"]
+            
+            # Apply cultural integration for empathy response
+            cultural_prompt = self._apply_cultural_integration(state, "empathy_response")
+            
+            # Get gender-aware addressing
+            gender_addressing = self._get_gender_aware_addressing(state)
+            
+            # Get RAG knowledge context if available
+            knowledge_context = state.get("knowledge_context", "")
+            rag_applied = state.get("rag_enhancement_applied", False)
+            
+            # Generate empathetic response with cultural context and RAG knowledge
+            system_prompt = f"""
+                   You are generating an empathetic response with cultural awareness for {language} speakers.
+                   
+                   {cultural_prompt}
+                   
+                   Generate a culturally sensitive, supportive response that:
+                   1. Uses appropriate cultural expressions and terminology
+                   2. Incorporates Ubuntu philosophy ("I am because we are")
+                   3. Shows understanding of family and community context
+                   4. Uses gender-aware addressing: {gender_addressing if gender_addressing else "friend"}
+                   5. Considers cultural stigma around mental health
+                   6. Provides hope and community support
+                   
+                   Available emotion response templates for {language}:
+                   {emotion_responses}
+                   
+                   {f"Relevant Mental Health Knowledge: {knowledge_context}" if rag_applied and knowledge_context else ""}
+                   
+                   Make the response feel authentic and relatable to Rwandan youth.
+                   Use the available knowledge to provide informed, evidence-based support while maintaining cultural sensitivity.
+                   """
+            
+            user_prompt = f"""
             Generate an empathetic response for this query:
             Query: "{query}"
-            Detected Emotion: {emotion}
+            Detected Emotion: {emotion.selected_emotion if emotion else "neutral"}
             Language: {language}
-            Gender Addressing: {gender_addressing}
+            Gender Addressing: {gender_addressing if gender_addressing else "friend"}
             
             Provide culturally sensitive, supportive response that feels authentic.
             """
+            
+            logger.info(f"📝 Empathy prompt prepared (system: {len(system_prompt)} chars)")
+            response = await self._call_llm(system_prompt, user_prompt, state)
+            
+            # Validate cultural appropriateness
+            is_culturally_appropriate = self._validate_cultural_appropriateness(response, state)
+            
+            state["generated_content"] = response
+            state["response_confidence"] = 0.8 if is_culturally_appropriate else 0.6
+            state["response_reason"] = f"Generated empathetic response with cultural sensitivity (appropriateness: {'high' if is_culturally_appropriate else 'medium'})"
+            
+            processing_time = time.time() - start_time
+            
+            # Add metadata
+            state = add_processing_metadata(
+                state,
+                "empathy_response",
+                0.8,
+                "Generated empathetic response with cultural context",
+                ["empathy", "support"],
+                processing_time
+            )
+            
+            logger.info(f"✅ Empathy response generated: {len(response)} chars, confidence=0.8")
+            
+        except Exception as e:
+            logger.error(f"❌ Empathy response generation failed: {e}")
+            add_error(state, f"Empathy response error: {str(e)}")
+            state["generated_content"] = "I understand you're going through a difficult time. I'm here to support you."
         
-        return await self._generate_response(state, "empathy", system_prompt_template, user_prompt_template)
+        return state
 
 
 class ElaborationNode(BasePipelineNode):
@@ -767,7 +810,6 @@ class ElaborationNode(BasePipelineNode):
             6. Incorporate Ubuntu philosophy of community support
             
             Make questions feel natural and culturally appropriate for Rwandan youth.
-            Keep your response concise and to the point, ideally under 3 sentences.
             """
             
             user_prompt = f"""
@@ -819,7 +861,6 @@ class ClarificationNode(BasePipelineNode):
             system_prompt = """
             You are a mental health support specialist. The user's query seems contradictory or confusing.
             Generate gentle questions to help clarify their situation and provide better support.
-            Keep your response concise and to the point, ideally under 3 sentences.
             """
             
             user_prompt = f"Generate clarification questions for this confusing query: '{query}'"
@@ -893,7 +934,6 @@ class SuggestionNode(BasePipelineNode):
                    {f"Relevant Mental Health Knowledge: {knowledge_context}" if rag_applied and knowledge_context else ""}
                    
                    Make suggestions feel authentic and culturally appropriate for Rwandan youth.
-                   Keep your response concise and to the point, ideally under 3 sentences.
                    Use the available knowledge to provide evidence-based, effective coping strategies.
                    """
             
@@ -944,7 +984,6 @@ class GuidanceNode(BasePipelineNode):
             system_prompt = """
             You are a mental health support specialist. Provide step-by-step guidance and support.
             Break down complex situations into manageable steps and offer ongoing support.
-            Keep your response concise and to the point, ideally under 3 sentences.
             """
             
             user_prompt = f"Provide step-by-step guidance for this query: '{query}'"
@@ -989,7 +1028,6 @@ class IdleNode(BasePipelineNode):
             system_prompt = """
             You are a mental health support specialist. Provide a general, supportive response.
             Keep it brief but warm and encouraging.
-            Keep your response concise and to the point, ideally under 3 sentences.
             """
             
             user_prompt = f"Provide a general supportive response for: '{query}'"
@@ -1041,11 +1079,18 @@ class CrisisAlertNode(BasePipelineNode):
             db = state.get("db")
             background = state.get("background")
 
+            logger.info(f"🚨 CrisisAlertNode: User: {user_id}, Conversation: {conversation_id}, Message: {message_id}")
+            logger.info(f"🚨 CrisisAlertNode: Query: '{query[:100]}{'...' if len(query) > 100 else ''}'")
+            logger.info(f"🚨 CrisisAlertNode: Crisis assessment: {crisis.crisis_severity.value if crisis else 'None'}")
+            logger.info(f"🚨 CrisisAlertNode: Parameters check - db: {db is not None}, background: {background is not None}, user_id: {user_id is not None}, conversation_id: {conversation_id is not None}, message_id: {message_id is not None}")
+
             # Use crisis_classifier to extract crisis information
             crisis_result = classify_crisis(query)
+            logger.info(f"🚨 CrisisAlertNode: Crisis classification result: {crisis_result}")
 
             # Log crisis and notify therapists if we have the required parameters
             if db and background and user_id and conversation_id and message_id:
+                logger.info(f"🚨 CrisisAlertNode: All parameters present, calling log_crisis_and_notify")
                 crisis_id = log_crisis_and_notify(
                     db=db,
                     background=background,
@@ -1058,6 +1103,9 @@ class CrisisAlertNode(BasePipelineNode):
                     classifier_version="1.0"
                 )
                 logger.info(f"🚨 Crisis logged with ID: {crisis_id}")
+            else:
+                logger.warning(f"🚨 CrisisAlertNode: MISSING PARAMETERS - db: {db}, background: {background}, user_id: {user_id}, conversation_id: {conversation_id}, message_id: {message_id}")
+                logger.warning(f"🚨 CrisisAlertNode: Crisis logging and notification SKIPPED due to missing parameters")
 
             # Get cultural context for crisis alert response
             cultural_context = self._get_cultural_context(state)
@@ -1092,7 +1140,6 @@ class CrisisAlertNode(BasePipelineNode):
             - Community Health: {crisis_resources.get('community_health', 'Contact local health center')}
 
             Make the response feel supportive and culturally appropriate while prioritizing safety.
-            Keep your response concise and to the point, ideally under 3 sentences, but ensure safety information is clear.
             """
 
             user_prompt = f"""
@@ -1170,11 +1217,11 @@ class GenerateResponseNode(BasePipelineNode):
             
             # If content already generated, validate and enhance it; otherwise generate contextual response
             if not state.get("generated_content"):
-                query_validation = state.get("query_validation")
-                query_type = query_validation.query_type if query_validation else QueryType.UNCLEAR
+                # Detect message type for natural response generation
+                message_type = self._detect_message_type(query)
                 gender_addressing = self._get_gender_aware_addressing(state)
                 
-                if query_type == QueryType.GREETING:
+                if message_type == "greeting":
                     # Use natural greeting templates
                     templates = self.cultural_prompts.get_conversation_template('greeting_responses', language)
                     if templates:
@@ -1196,7 +1243,7 @@ class GenerateResponseNode(BasePipelineNode):
                         state["response_confidence"] = 0.8
                         state["response_reason"] = f"Fallback greeting in {language}"
                         
-                elif query_type == QueryType.CASUAL:
+                elif message_type == "casual":
                     # Use casual conversation templates
                     templates = self.cultural_prompts.get_conversation_template('casual_responses', language)
                     if templates:
@@ -1267,4 +1314,49 @@ class GenerateResponseNode(BasePipelineNode):
         
         return state
 
-
+    def _detect_message_type(self, query: str) -> str:
+        """Detect the type of message for appropriate response generation."""
+        query_lower = query.lower().strip()
+        
+        # Mental health/serious topic patterns (check first)
+        serious_patterns = [
+            'sad', 'depressed', 'anxiety', 'anxious', 'worried', 'stress', 'stressed',
+            'help', 'problem', 'issue', 'trouble', 'difficult', 'hard', 'struggling',
+            'feel', 'feeling', 'emotion', 'mood', 'mental', 'therapy', 'counseling',
+            'suicide', 'death', 'hurt', 'pain', 'cry', 'crying', 'lonely', 'alone'
+        ]
+        
+        # Greeting patterns
+        greeting_patterns = [
+            'hello', 'hi', 'hey', 'hola', 'muraho', 'bonjour', 'salut', 'hujambo',
+            'good morning', 'good afternoon', 'good evening', 'how are you',
+            'mindora', 'greetings'
+        ]
+        
+        # Casual conversation patterns
+        casual_patterns = [
+            'how are things', 'what\'s up', 'how\'s it going', 'nice to meet',
+            'thanks', 'thank you', 'okay', 'alright', 'cool', 'interesting'
+        ]
+        
+        # Check for serious topics first (highest priority)
+        for pattern in serious_patterns:
+            if pattern in query_lower:
+                return "serious"
+        
+        # Check for greetings
+        for pattern in greeting_patterns:
+            if pattern in query_lower:
+                return "greeting"
+        
+        # Check for casual conversation
+        for pattern in casual_patterns:
+            if pattern in query_lower:
+                return "casual"
+        
+        # Check if it's a very short message (likely casual) but not if it contains serious words
+        if len(query.split()) <= 3 and len(query) <= 20:
+            return "casual"
+        
+        # Default to serious/supportive for longer or complex messages
+        return "serious"

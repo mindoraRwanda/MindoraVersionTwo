@@ -264,7 +264,7 @@ class ServiceContainer:
                 
                 return StatefulMentalHealthPipeline(
                     llm_provider=llm_service.llm_provider,
-                    rag_service=rag_service
+                    rag_service=rag_service,
                 )
             else:
                 # Fallback to default if LLM service not available yet

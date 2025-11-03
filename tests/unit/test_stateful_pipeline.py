@@ -202,13 +202,12 @@ class TestCrisisDetectionNode:
             "llm_calls_made": 0,
             "errors": []
         }
-        
+
         result = await crisis_node.execute(state)
-        
+
         assert "crisis_assessment" in result
         assert result["crisis_assessment"].crisis_severity == CrisisSeverity.NONE
         assert result["crisis_assessment"].crisis_confidence == 0.1
-
     @pytest.mark.asyncio
     async def test_crisis_detection_high_crisis(self, crisis_node):
         """Test crisis detection for high-risk queries."""

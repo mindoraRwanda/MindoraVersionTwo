@@ -1,17 +1,22 @@
 from abc import ABC, abstractmethod
-from typing import List, Dict, Any, Optional, Union
+from typing import List, Dict, Any, Optional, Union, Type
 import os
 import requests
 import asyncio
 from ..settings.settings import settings
+from pydantic import BaseModel
 try:
+
     from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage, AIMessage
+    from pydantic import BaseModel
+    from langchain_community.llms import HuggingFacePipeline # Added for HuggingFaceProvider
 except ImportError:
     # Fallback for type hints if langchain is not available
     BaseMessage = Any
     HumanMessage = Any
     SystemMessage = Any
     AIMessage = Any
+    BaseModel = Any
 
 
 class LLMProvider(ABC):
@@ -22,13 +27,21 @@ class LLMProvider(ABC):
         self.kwargs = kwargs
 
     @abstractmethod
-    async def generate_response(self, messages: List[Any]) -> str:
-        """Generate a response from the given messages."""
+    async def generate_response(self, messages: List[Any], structured_output: Optional[Union[Type[BaseModel], Dict[str, Any]]] = None) -> Union[str, Any]:
+        """Generate a response from the given messages.
+        
+        Args:
+            messages: List of messages to send to the LLM
+            structured_output: Optional Pydantic model or dict schema for structured output
+            
+        Returns:
+            String response or structured object if structured_output is provided
+        """
         pass
     
-    async def agenerate(self, messages: List[Any]) -> str:
+    async def agenerate(self, messages: List[Any], structured_output: Optional[Union[Type[BaseModel], Dict[str, Any]]] = None) -> Union[str, Any]:
         """Alias for generate_response for compatibility with pipeline nodes."""
-        return await self.generate_response(messages)
+        return await self.generate_response(messages, structured_output)
 
     @abstractmethod
     def is_available(self) -> bool:
@@ -41,8 +54,12 @@ class LLMProvider(ABC):
         """Return the provider name."""
         pass
 
-    def _extract_content(self, response: Any) -> str:
+    def _extract_content(self, response: Any, structured_output: Optional[Union[Type[BaseModel], Dict[str, Any]]] = None) -> Union[str, Any]:
         """Extract content from various LLM response formats."""
+        # If structured output was requested and we got a structured response, return it directly
+        if structured_output and isinstance(response, (dict, BaseModel)):
+            return response
+            
         if hasattr(response, 'content') and response.content is not None:
             content = response.content
             if isinstance(content, str):
@@ -94,7 +111,7 @@ class ChatOllamaProvider(LLMProvider):
             print(f"⚠️  Error parsing Ollama response: {e}")
             return False
 
-    async def generate_response(self, messages: List[Any]) -> str:
+    async def generate_response(self, messages: List[Any], structured_output: Optional[Union[Type[BaseModel], Dict[str, Any]]] = None) -> Union[str, Any]:
         """Generate response using Ollama."""
         if not self._chat_model:
             try:
@@ -111,8 +128,18 @@ class ChatOllamaProvider(LLMProvider):
             except ImportError:
                 raise RuntimeError("langchain_ollama not installed. Install with: pip install langchain_ollama")
 
+        # Use structured output if requested
+        if structured_output:
+            try:
+                structured_model = self._chat_model.with_structured_output(structured_output)
+                response = await structured_model.ainvoke(messages)
+                return response
+            except Exception as e:
+                print(f"Warning: Structured output failed for Ollama, falling back to text: {e}")
+                # Fall back to regular generation
+        
         response = await self._chat_model.ainvoke(messages)
-        return self._extract_content(response)
+        return self._extract_content(response, structured_output)
 
 
 class ChatOpenAIProvider(LLMProvider):
@@ -131,7 +158,7 @@ class ChatOpenAIProvider(LLMProvider):
         """Check if OpenAI API key is configured."""
         return bool(self.api_key and self.api_key.strip())
 
-    async def generate_response(self, messages: List[Any]) -> str:
+    async def generate_response(self, messages: List[Any], structured_output: Optional[Union[Type[BaseModel], Dict[str, Any]]] = None) -> Union[str, Any]:
         """Generate response using OpenAI."""
         if not self._chat_model:
             try:
@@ -150,8 +177,18 @@ class ChatOpenAIProvider(LLMProvider):
             except ImportError:
                 raise RuntimeError("langchain_openai not installed. Install with: pip install langchain_openai")
 
+        # Use structured output if requested
+        if structured_output:
+            try:
+                structured_model = self._chat_model.with_structured_output(structured_output)
+                response = await structured_model.ainvoke(messages)
+                return response
+            except Exception as e:
+                print(f"Warning: Structured output failed for OpenAI, falling back to text: {e}")
+                # Fall back to regular generation
+
         response = await self._chat_model.ainvoke(messages)
-        return self._extract_content(response)
+        return self._extract_content(response, structured_output)
 
 
 class ChatGroqProvider(LLMProvider):
@@ -170,7 +207,7 @@ class ChatGroqProvider(LLMProvider):
         """Check if Groq API key is configured."""
         return bool(self.api_key and self.api_key.strip())
 
-    async def generate_response(self, messages: List[Any]) -> str:
+    async def generate_response(self, messages: List[Any], structured_output: Optional[Union[Type[BaseModel], Dict[str, Any]]] = None) -> Union[str, Any]:
         """Generate response using Groq."""
         if not self._chat_model:
             try:
@@ -189,8 +226,18 @@ class ChatGroqProvider(LLMProvider):
             except ImportError:
                 raise RuntimeError("langchain_groq not installed. Install with: pip install langchain_groq")
 
+        # Use structured output if requested
+        if structured_output:
+            try:
+                structured_model = self._chat_model.with_structured_output(structured_output)
+                response = await structured_model.ainvoke(messages)
+                return response
+            except Exception as e:
+                print(f"Warning: Structured output failed for Groq, falling back to text: {e}")
+                # Fall back to regular generation
+
         response = await self._chat_model.ainvoke(messages)
-        return self._extract_content(response)
+        return self._extract_content(response, structured_output)
 
 
 class ChatHuggingFaceProvider(LLMProvider):
@@ -274,8 +321,9 @@ class ChatHuggingFaceProvider(LLMProvider):
 
             # Use the compatibility layer for gradual migration
             model_temperature = settings.model.temperature if settings.model else 1.0
-            # Create pipeline for text generation
-            self._chat_model = pipeline(
+            
+            # Create transformers pipeline
+            hf_pipeline = pipeline(
                 "text-generation",
                 model=self._model,
                 tokenizer=self._tokenizer,
@@ -284,6 +332,9 @@ class ChatHuggingFaceProvider(LLMProvider):
                 pad_token_id=self._tokenizer.eos_token_id,
                 **self.kwargs
             )
+
+            # Wrap the transformers pipeline with LangChain's HuggingFacePipeline
+            self._chat_model = HuggingFacePipeline(pipeline=hf_pipeline)
 
             print(f"✅ Successfully loaded HuggingFace model: {self.model_path}")
 
@@ -294,47 +345,51 @@ class ChatHuggingFaceProvider(LLMProvider):
         finally:
             self._model_loading = False
 
-    async def generate_response(self, messages: List[Any]) -> str:
+    async def generate_response(self, messages: List[Any], structured_output: Optional[Union[Type[BaseModel], Dict[str, Any]]] = None) -> Union[str, Any]:
         """Generate response using HuggingFace local model."""
         # Check if model failed to load during initialization
         if self._model_load_error:
             raise RuntimeError(f"Model failed to load during initialization: {self._model_load_error}")
 
         # Load model if not already loaded
-        if not self._chat_model or not self._tokenizer:
+        if not self._chat_model: # self._tokenizer is now part of the pipeline within _chat_model
             try:
                 self._load_model()
             except Exception as e:
                 raise RuntimeError(f"Failed to load HuggingFace model {self.model_path}: {e}")
 
-        # Convert messages to prompt format
+        # Convert messages to prompt format for LangChain's LLM
+        # LangChain's HuggingFacePipeline expects a string prompt, not a list of messages
+        # We need to convert the messages to a single string.
+        # For structured output, LangChain's with_structured_output will handle the prompt modification.
+        # For regular text generation, we'll create a simple prompt.
+        
+        # Convert messages to a simple prompt string for text generation
+        # This part is needed for both structured and unstructured calls, as ainvoke expects a string
         if len(messages) >= 2:
             system_message = messages[0].content if hasattr(messages[0], 'content') else str(messages[0])
             user_message = messages[-1].content if hasattr(messages[-1], 'content') else str(messages[-1])
-            prompt = f"System: {system_message}\n\nHuman: {user_message}\n\nAssistant:"
+            prompt_string = f"System: {system_message}\n\nHuman: {user_message}\n\nAssistant:"
         else:
-            prompt = str(messages[0]) if messages else ""
+            prompt_string = str(messages[0]) if messages else ""
 
+        # Use structured output if requested
+        if structured_output:
+            try:
+                # LangChain's with_structured_output will handle the prompt formatting
+                structured_model = self._chat_model.with_structured_output(structured_output)
+                # ainvoke for LLMs expects a string, not a list of messages
+                response = await structured_model.ainvoke(prompt_string) 
+                return response
+            except Exception as e:
+                print(f"Warning: Structured output failed for HuggingFace, falling back to text: {e}")
+                # Fall back to regular generation
+        
+        # If no structured output or structured output failed, generate text response
         try:
-            # Generate response with timeout
-            loop = asyncio.get_event_loop()
-            outputs = await asyncio.wait_for(
-                loop.run_in_executor(None, self._chat_model, prompt),
-                timeout=30  # 30 second timeout for generation
-            )
-
-            if isinstance(outputs, list) and len(outputs) > 0:
-                generated_text = outputs[0].get('generated_text', '')
-            else:
-                generated_text = str(outputs) if outputs else ""
-
-            # Extract only the assistant's response (remove the prompt)
-            if "Assistant:" in generated_text:
-                response = generated_text.split("Assistant:")[-1].strip()
-            else:
-                response = generated_text.replace(prompt, "").strip()
-
-            return response
+            # LangChain's HuggingFacePipeline.ainvoke expects a string
+            response = await self._chat_model.ainvoke(prompt_string)
+            return self._extract_content(response, structured_output)
 
         except asyncio.TimeoutError:
             raise RuntimeError(f"Model generation timed out for {self.model_path}. The model may be overloaded or the request too complex.")
@@ -465,3 +520,46 @@ def create_llm_provider(
         preload_model=preload_model,
         **kwargs
     )
+# Example usage with simplified structured output
+"""
+Example usage with structured output passed directly to generate_response:
+
+from pydantic import BaseModel
+from typing import List
+
+class EmotionAnalysis(BaseModel):
+    emotion: str
+    confidence: float
+    reasoning: str
+
+# Create provider
+provider = create_llm_provider("openai", "gpt-4")
+
+# Use structured output directly in generate_response
+messages = [
+    SystemMessage(content="You are an emotion analysis expert."),
+    HumanMessage(content="I'm feeling really anxious about my job interview tomorrow.")
+]
+
+# Pass structured output schema directly to the method
+response = await provider.generate_response(messages, structured_output=EmotionAnalysis)
+# response will be an EmotionAnalysis object with emotion, confidence, and reasoning fields
+
+# Or with dictionary schema:
+schema = {
+    "type": "object",
+    "properties": {
+        "emotion": {"type": "string"},
+        "confidence": {"type": "number"},
+        "reasoning": {"type": "string"}
+    },
+    "required": ["emotion", "confidence", "reasoning"]
+}
+
+response = await provider.generate_response(messages, structured_output=schema)
+# response will be a dictionary matching the schema
+
+# Regular text response (no structured output)
+text_response = await provider.generate_response(messages)
+# text_response will be a string
+"""

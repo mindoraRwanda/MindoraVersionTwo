@@ -50,9 +50,11 @@ except ImportError:
 try:
     from .routers.conversations_router import router as conversations_router
     from .routers.messages_router import router as messages_router
+    from .routers.voice_router import router as voice_router
 except ImportError:
     from .routers.conversations_router import router as conversations_router
     from .routers.messages_router import router as messages_router
+    from .routers.voice_router import router as voice_router
 
 # Import service container for global service management
 try:
@@ -114,6 +116,7 @@ async def shutdown_event():
 app.include_router(auth_router)  # Authentication endpoints
 app.include_router(conversations_router)  # Conversation management
 app.include_router(messages_router)  # Message handling
+app.include_router(voice_router)  # Voice message handling
 
 # CORS for frontend (using settings)
 app.add_middleware(

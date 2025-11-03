@@ -6,7 +6,7 @@ class DatabaseSettings(BaseAppSettings):
     """Configuration for database connections."""
     
     # Primary database
-    database_url: str = "sqlite:///./mindora.db"
+    database_url: str = "postgresql://postgres:kofivi%402020@localhost:5432/mindora"
     
     # Database connection settings
     database_pool_size: int = 5

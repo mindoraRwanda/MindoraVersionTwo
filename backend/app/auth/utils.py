@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from uuid import UUID
 from ..db.models import User
 from ..db.database import get_db
+from .schemas import UserOut
 import os
 import hashlib
 
@@ -42,7 +43,7 @@ def create_access_token(data: dict) -> str:
 def get_current_user(
     token: str = Depends(oauth2_scheme),
     db: Session = Depends(get_db)
-) -> User:
+) -> UserOut:
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",

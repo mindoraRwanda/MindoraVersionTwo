@@ -8,6 +8,7 @@ annoy==1.17.3
 anyio==4.9.0
 asgiref==3.8.1
 attrs==25.3.0
+av==16.0.1
 backoff==2.2.1
 bcrypt==4.0.1
 black==25.9.0
@@ -27,6 +28,7 @@ configobj==5.0.9
 configparser==7.2.0
 coverage==7.10.6
 cryptography==45.0.5
+ctranslate2==4.6.0
 dataclasses-json==0.6.7
 datasets==4.0.0
 Deprecated==1.2.18
@@ -44,6 +46,7 @@ fastapi==0.115.12
 fastapi-cli==0.0.12
 fastapi-cloud-cli==0.2.0
 fastembed==0.6.0
+faster-whisper==1.2.0
 filelock==3.18.0
 flake8==7.3.0
 flatbuffers==25.2.10
@@ -54,6 +57,7 @@ googleapis-common-protos==1.69.2
 greenlet==3.1.1
 groq==0.31.1
 grpcio==1.71.0
+gTTS==2.5.4
 h11==0.14.0
 h2==4.2.0
 hf-xet==1.1.10
@@ -85,19 +89,11 @@ langchain-ollama==0.3.6
 langchain-openai==0.3.32
 langchain-text-splitters==0.3.7
 langdetect==1.0.9
-langid==1.1.6
-langgraph==0.6.8
-langchain==0.3.21
-langchain-community==0.3.20
-langchain-core==0.3.75
-langchain-groq==0.3.8
-langchain-ollama==0.3.6
-langchain-openai==0.3.32
-langchain-text-splitters==0.3.7
 langgraph==0.6.8
 langgraph-checkpoint==2.1.1
 langgraph-prebuilt==0.6.4
 langgraph-sdk==0.2.9
+langid==1.1.6
 langsmith==0.3.45
 lark==1.2.2
 llama_cpp_python==0.3.8
@@ -116,7 +112,7 @@ multidict==6.2.0
 multiprocess==0.70.16
 mypy==1.18.2
 mypy-extensions==1.0.0
-
+nemoguardrails==0.15.0
 nest-asyncio==1.6.0
 networkx==3.5
 nibabel==5.3.2

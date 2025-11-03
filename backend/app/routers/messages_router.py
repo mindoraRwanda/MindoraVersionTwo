@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
 import bleach
 import time
 import json
@@ -8,31 +8,13 @@ from ..auth.utils import get_current_user
 from ..settings.settings import settings
 from ..db.database import SessionLocal
 from ..db.models import Conversation, Message, User, EmotionLog
-from ..auth.schemas import MessageCreate, MessageOut
+from ..auth.schemas import MessageCreate, MessageOut, UserOut
 # Removed: unified_conversation_workflow (consolidated into stateful_pipeline)
 from ..services.stateful_pipeline import StatefulMentalHealthPipeline
 
 # Import the new stateful conversation system
 from ..services.session_state_manager import session_manager
-
-# Import service container for dependency injection
-def get_llm_service():
-    """Get LLM service from service container."""
-    from ..services.service_container import get_service
-    return get_service("llm_service")
-
-# Removed: get_unified_workflow (consolidated into stateful_pipeline)
-
-def get_stateful_pipeline():
-    """Get stateful mental health pipeline from service container."""
-    from ..services.service_container import get_service
-    try:
-        return get_service("stateful_pipeline")
-    except Exception:
-        # Fallback to creating a new instance
-        from ..services.stateful_pipeline import initialize_stateful_pipeline
-        llm_service = get_service("llm_service")
-        return initialize_stateful_pipeline(llm_provider=llm_service.llm_provider if llm_service else None)
+from ..dependencies import get_stateful_pipeline
 
 router = APIRouter(prefix="/auth", tags=["Messages"])
 
@@ -46,12 +28,12 @@ def get_db():
 
 # --- Message Handling Endpoints ---
 
-@router.post("/messages", response_model=MessageOut)
+@router.post("/messages")
 async def send_message(
     message: MessageCreate,
+    background: BackgroundTasks,
+    user: UserOut = Depends(get_current_user),
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
-    stateful_pipeline: StatefulMentalHealthPipeline = Depends(get_stateful_pipeline)
 ):
     """
     Enhanced message endpoint with stateful LangGraph mental health pipeline.
@@ -66,6 +48,7 @@ async def send_message(
 
     The pipeline provides complete explainability for all processing decisions.
     """
+    stateful_pipeline = get_stateful_pipeline(db=db, background=background)
     pipeline_start = time.time()
     print(f"\n🚀 Starting enhanced message pipeline for user {user.id}")
 
@@ -105,6 +88,17 @@ async def send_message(
     history_time = time.time() - history_start
     print(f"⏱️  DB history load: {history_time:.3f}s ({len(recent_history)} messages)")
 
+    # Save user message to database BEFORE pipeline processing to ensure message_id is available for crisis logging
+    user_msg = Message(
+        conversation_id=convo.id,
+        sender="user",
+        content=clean_content
+    )
+    db.add(user_msg)
+    db.commit()
+    db.refresh(user_msg)
+    print(f"💾 User message saved with ID: {user_msg.uuid}")
+
     # Use the stateful mental health pipeline for end-to-end processing
     workflow_start = time.time()
     pipeline_result = {}  # Initialize to avoid unbound variable
@@ -114,8 +108,12 @@ async def send_message(
         pipeline_result = await stateful_pipeline.process_query(
             query=clean_content,
             user_id=str(user.id),
+            conversation_id=str(convo.id),
+            message_id=str(user_msg.id),
             conversation_history=conversation_history,
-            user_gender=user.gender  # Pass user gender for cultural context
+            user_gender=str(user.gender),  # Pass user gender for cultural context
+            db=db,
+            background=background
         )
 
         bot_reply = pipeline_result.get("response", "I'm here to support you.")
@@ -144,11 +142,6 @@ async def send_message(
 
     # Batch database operations - create all objects first
     db_prep_start = time.time()
-    user_msg = Message(
-        conversation_id=convo.id,
-        sender="user",
-        content=clean_content
-    )
 
     bot_msg = Message(
         conversation_id=convo.id,
@@ -164,7 +157,7 @@ async def send_message(
     )
 
     # Single transaction - add all objects and commit once
-    db.add_all([user_msg, bot_msg, emotion_log])
+    db.add_all([bot_msg, emotion_log])
     convo.last_activity_at = bot_msg.timestamp
     db.commit()
 
@@ -197,7 +190,7 @@ async def send_message(
 
     return {
         "id": bot_msg.uuid,
-        "sender": bot_msg.sender,
+        "sender": bot_msg.sender.value,
         "content": bot_msg.content,
         "timestamp": bot_msg.timestamp
     }

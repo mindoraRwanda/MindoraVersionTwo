@@ -9,6 +9,8 @@ from typing import Dict, List, Any, Optional, TypedDict, Union
 from enum import Enum
 from datetime import datetime
 from pydantic import BaseModel, Field
+from sqlalchemy.orm import Session
+from fastapi import BackgroundTasks
 
 
 class QueryType(Enum):
@@ -17,6 +19,8 @@ class QueryType(Enum):
     CRISIS = "crisis"
     RANDOM = "random"
     UNCLEAR = "unclear"
+    GREETING = "greeting"
+    CASUAL = "casual"
 
 
 class CrisisSeverity(Enum):
@@ -60,10 +64,11 @@ class QueryValidationResult(BaseModel):
 
 class CrisisAssessment(BaseModel):
     """Results from crisis detection node."""
-    crisis_confidence: float = Field(ge=0.0, le=1.0)
-    crisis_keywords: List[str] = []
-    crisis_reason: str
-    crisis_severity: CrisisSeverity = CrisisSeverity.NONE
+    is_crisis: bool = Field(..., description="Whether a crisis is detected")
+    crisis_confidence: float = Field(ge=0.0, le=1.0, description="Confidence score for crisis detection")
+    crisis_keywords: List[str] = Field(..., description="Keywords indicating crisis")
+    crisis_reason: str = Field(..., description="Reasoning behind crisis assessment")
+    crisis_severity: CrisisSeverity = Field(description="Assessed severity of the crisis", default=CrisisSeverity.NONE)
 
 
 class EmotionDetection(BaseModel):
@@ -88,7 +93,11 @@ class StatefulPipelineState(TypedDict):
     # Input data
     user_query: str
     user_id: Optional[str]
+    conversation_id: Optional[str]
+    message_id: Optional[str]
     conversation_history: List[Dict[str, Any]]
+    db: Optional[Session]
+    background: Optional[BackgroundTasks]
     
     # Processing results
     query_validation: Optional[QueryValidationResult]
@@ -125,19 +134,31 @@ class StatefulPipelineState(TypedDict):
     knowledge_context: str
     rag_enhancement_applied: bool
     rag_relevance_score: float
+    llm_provider: Optional[Any]
+    cultural_helper: Optional[Any]
+
+
 
 
 def create_initial_pipeline_state(
     query: str,
     user_id: Optional[str] = None,
+    conversation_id: Optional[str] = None,
+    message_id: Optional[str] = None,
     conversation_history: Optional[List[Dict[str, Any]]] = None,
-    user_gender: Optional[str] = None
+    user_gender: Optional[str] = None,
+    db: Optional[Session] = None,
+    background: Optional[BackgroundTasks] = None
 ) -> StatefulPipelineState:
     """Create initial state for the pipeline."""
     return {
         "user_query": query,
         "user_id": user_id,
+        "conversation_id": conversation_id,
+        "message_id": message_id,
         "conversation_history": conversation_history or [],
+        "db": db,
+        "background": background,
         "query_validation": None,
         "crisis_assessment": None,
         "emotion_detection": None,
@@ -161,7 +182,9 @@ def create_initial_pipeline_state(
         "retrieved_knowledge": [],
         "knowledge_context": "",
         "rag_enhancement_applied": False,
-        "rag_relevance_score": 0.0
+        "rag_relevance_score": 0.0,
+        "llm_provider": None,
+        "cultural_helper": None
     }
 
 

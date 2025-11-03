@@ -48,6 +48,16 @@ class ConversationOut(BaseModel):
     class Config:
         from_attributes = True
 
+class UserOut(BaseModel):
+    id: UUID
+    username: str
+    email: EmailStr
+    gender: Optional[str] = None
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
 class EmotionRequest(BaseModel):
     text: str    
         

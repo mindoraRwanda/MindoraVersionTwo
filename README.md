@@ -100,6 +100,7 @@ cp .env.example .env
 python -c "from backend.app.db.database import engine; from backend.app.db import models; models.Base.metadata.create_all(bind=engine)"
 
 # Start backend
+python3 backend/app/db/run_migrations.py
 uvicorn backend.app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
@@ -489,6 +490,18 @@ docker-compose up --build
 docker-compose down
 docker volume rm mindora_postgres_data
 docker-compose up postgres
+# Migration commands
+# Run all migrations
+python3 backend/app/db/run_migrations.py
+
+# Dry run (see what would happen)
+python3 backend/app/db/run_migrations.py --dry-run
+
+# Run a specific migration
+python3 backend/app/db/run_migrations.py --migration add_gender_column
+
+# List all available migrations
+python3 backend/app/db/run_migrations.py --list
 ```
 
 #### LLM Provider Issues

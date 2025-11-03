@@ -60,8 +60,8 @@ try:
 except ImportError:
     from .services.service_container import service_container, check_service_health
 
-# TEMPORARY: Drop everything before recreating
-models.Base.metadata.create_all(bind=engine)  # ❗️ This rebuilds all tables
+# Create tables with schema updates (won't drop existing tables)
+models.Base.metadata.create_all(bind=engine)
 
 # Create FastAPI app first
 app = FastAPI(

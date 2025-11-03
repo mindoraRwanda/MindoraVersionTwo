@@ -52,6 +52,7 @@ class User(Base):
     phone = Column(String(50))
     email = Column(String(255), nullable=False, unique=True, index=True)
     password = Column(String(255), nullable=False)  # store hash
+    gender = Column(String(20), nullable=True)  # Optional gender field for cultural personalization
     
     created_at = Column(TIMESTAMP, server_default=func.now())
 

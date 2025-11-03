@@ -67,8 +67,14 @@ async def send_message(
 
     # Single query to verify conversation ownership
     db_start = time.time()
+    # Convert conversation_id (string or int) to int for database query
+    try:
+        conv_id = int(message.conversation_id) if isinstance(message.conversation_id, str) else message.conversation_id
+    except (ValueError, TypeError):
+        raise HTTPException(status_code=400, detail="Invalid conversation ID format")
+    
     convo = db.query(Conversation).filter_by(
-        uuid=message.conversation_id,
+        id=conv_id,
         user_id=user.id
     ).first()
     db_lookup_time = time.time() - db_start

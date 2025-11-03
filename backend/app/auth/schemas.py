@@ -1,7 +1,6 @@
 from pydantic import BaseModel, EmailStr, constr
-from typing import Annotated, List, Optional
+from typing import Annotated, List, Optional, Union
 from datetime import datetime
-from uuid import UUID
 # Legacy chatbot_insights_pipeline import removed
 
 
@@ -24,16 +23,16 @@ class UserLogin(BaseModel):
 class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
-    user_id: Optional[UUID] = None
+    user_id: Optional[str] = None  # Changed from UUID to str for compatibility with integer IDs
     username: Optional[str] = None
     gender: Optional[str] = None
 
 class MessageCreate(BaseModel):
-    conversation_id: UUID
+    conversation_id: Union[str, int]  # Accept both string and int for compatibility
     content: Annotated[str, constr(min_length=1)]  # Ensures message is not empty
 
 class MessageOut(BaseModel):
-    id: UUID
+    id: str  # Changed from UUID to str for compatibility with integer IDs
     sender: str
     content: str
     timestamp: datetime
@@ -42,7 +41,7 @@ class MessageOut(BaseModel):
         from_attributes = True  # for Pydantic v2 (replaces orm_mode)
 
 class ConversationOut(BaseModel):
-    id: UUID
+    id: str  # Changed from UUID to str for compatibility with integer IDs
     started_at: datetime
 
     class Config:

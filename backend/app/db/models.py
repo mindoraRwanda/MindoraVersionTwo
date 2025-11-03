@@ -60,6 +60,11 @@ class User(Base):
     emotion_logs = relationship("EmotionLog", back_populates="user", cascade="all, delete-orphan")
     therapist_links = relationship("UserTherapist", back_populates="user", cascade="all, delete-orphan")
     crisis_logs = relationship("CrisisLog", back_populates="user")
+    
+    @property
+    def uuid(self):
+        """Return a string representation of id for compatibility with code expecting uuid."""
+        return str(self.id)
 
 class UserTherapist(Base):
     __tablename__ = "user_therapists"
@@ -87,6 +92,11 @@ class Conversation(Base):
     messages = relationship("Message", back_populates="conversation", cascade="all, delete-orphan")
     emotion_logs = relationship("EmotionLog", back_populates="conversation", cascade="all, delete-orphan")
     crisis_logs = relationship("CrisisLog", back_populates="conversation")
+    
+    @property
+    def uuid(self):
+        """Return a string representation of id for compatibility with code expecting uuid."""
+        return str(self.id)
 
 class Message(Base):
     __tablename__ = "messages"
@@ -99,6 +109,11 @@ class Message(Base):
     meta = Column(JSON, server_default="{}")
 
     conversation = relationship("Conversation", back_populates="messages")
+    
+    @property
+    def uuid(self):
+        """Return a string representation of id for compatibility with code expecting uuid."""
+        return str(self.id)
 
 class EmotionLog(Base):
     __tablename__ = "emotion_logs"

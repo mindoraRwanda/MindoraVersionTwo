@@ -1,7 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from typing import List
-from uuid import UUID
 from ..auth.utils import get_current_user
 from ..db.database import SessionLocal
 from ..db.models import Conversation, Message, User, EmotionLog
@@ -60,13 +59,19 @@ def list_user_conversations(
 
 @router.get("/conversations/{conversation_id}/messages", response_model=List[dict])
 def get_conversation_messages(
-    conversation_id: UUID,
+    conversation_id: str,
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user)
 ):
     """Get all messages for a specific conversation."""
+    # Convert string conversation_id to int for database query
+    try:
+        conv_id_int = int(conversation_id)
+    except (ValueError, TypeError):
+        raise HTTPException(status_code=400, detail="Invalid conversation ID format")
+    
     conversation = db.query(Conversation)\
-        .filter_by(uuid=conversation_id, user_id=user.id).first()
+        .filter_by(id=conv_id_int, user_id=user.id).first()
 
     if not conversation:
         raise HTTPException(status_code=404, detail="Conversation not found")
@@ -88,13 +93,19 @@ def get_conversation_messages(
 
 @router.delete("/conversations/{conversation_id}")
 def delete_conversation(
-    conversation_id: UUID,
+    conversation_id: str,
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user)
 ):
     """Delete a conversation and all its messages."""
+    # Convert string conversation_id to int for database query
+    try:
+        conv_id_int = int(conversation_id)
+    except (ValueError, TypeError):
+        raise HTTPException(status_code=400, detail="Invalid conversation ID format")
+    
     conversation = db.query(Conversation)\
-        .filter_by(uuid=conversation_id, user_id=user.id).first()
+        .filter_by(id=conv_id_int, user_id=user.id).first()
 
     if not conversation:
         raise HTTPException(status_code=404, detail="Conversation not found")

@@ -4,7 +4,6 @@ from datetime import datetime, timedelta
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
-from uuid import UUID
 from ..db.models import User
 from ..db.database import get_db
 import os
@@ -56,7 +55,13 @@ def get_current_user(
     except pyjwt.PyJWTError:
         raise credentials_exception
 
-    user = db.query(User).filter(User.uuid == UUID(user_id)).first()
+    # Convert user_id string to int since uuid property returns str(id)
+    try:
+        user_id_int = int(user_id)
+    except (ValueError, TypeError):
+        raise credentials_exception
+    
+    user = db.query(User).filter(User.id == user_id_int).first()
     if user is None:
         raise credentials_exception
     return user

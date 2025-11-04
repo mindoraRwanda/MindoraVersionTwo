@@ -5,6 +5,10 @@ import requests
 import asyncio
 from ..settings.settings import settings
 from pydantic import BaseModel
+import logging
+
+logger = logging.getLogger(__name__)
+
 try:
 
     from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage, AIMessage
@@ -241,26 +245,35 @@ class ChatGroqProvider(LLMProvider):
 
 
 class ChatHuggingFaceProvider(LLMProvider):
-    """HuggingFace local LLM provider implementation."""
+    """HuggingFace local LLM provider implementation with chat template support."""
 
-    def __init__(self, model_name: str, model_path: Optional[str] = None, device: str = "auto", preload_model: bool = False, **kwargs):
+    def __init__(
+        self,
+        model_name: str,
+        model_path: Optional[str] = None,
+        device: str = "auto",
+        preload_model: bool = False,
+        max_new_tokens: Optional[int] = None,
+        timeout: int = 300,
+        **kwargs,
+    ):
         super().__init__(model_name, **kwargs)
-        # Default to SmolLM3-3B if no specific model path provided
         default_model = "HuggingFaceTB/SmolLM3-3B" if not model_path else model_path
         self.model_path = model_path or default_model
         self.device = device
         self.preload_model = preload_model or os.getenv("HUGGINGFACE_PRELOAD_MODEL", "false").lower() == "true"
-        self._chat_model = None
+        self.max_new_tokens = max_new_tokens or getattr(settings.model, "max_tokens", None) or 32768
+        self.timeout = timeout
         self._tokenizer = None
+        self._model = None
         self._model_loading = False
         self._model_load_error = None
 
-        # Preload model if requested
         if self.preload_model:
             try:
                 self._load_model()
             except Exception as e:
-                print(f"Warning: Failed to preload HuggingFace model {self.model_path}: {e}")
+                logger.warning(f"Failed to preload HuggingFace model {self.model_path}: {e}")
                 self._model_load_error = str(e)
 
     @property
@@ -268,39 +281,30 @@ class ChatHuggingFaceProvider(LLMProvider):
         return "huggingface"
 
     def is_available(self) -> bool:
-        """Check if HuggingFace model is available and properly configured."""
+        """Check if HuggingFace transformers is installed."""
         try:
-            # Check if transformers is installed
-            import transformers
-            # Check if model path exists or is accessible (without loading)
-            try:
-                from transformers import AutoConfig
-                AutoConfig.from_pretrained(self.model_path, timeout=5)
-                return True
-            except Exception:
-                # Model not accessible, but transformers is installed
-                return True
+            import transformers  # noqa: F401
+            return True
         except ImportError:
             return False
 
     def _load_model(self) -> None:
-        """Load the HuggingFace model with timeout and error handling."""
+        """Load the HuggingFace model and tokenizer with error handling."""
         if self._model_loading:
-            # Prevent concurrent loading attempts
             return
 
         self._model_loading = True
         try:
-            from transformers import AutoTokenizer, AutoModelForCausalLM, pipeline
+            from transformers import AutoTokenizer, AutoModelForCausalLM
             import torch
 
-            print(f"Loading HuggingFace model: {self.model_path}")
+            logger.info(f"Loading HuggingFace model: {self.model_path}")
 
-            # Initialize tokenizer and model with timeout handling
+            # Load tokenizer with timeout
             try:
                 self._tokenizer = AutoTokenizer.from_pretrained(
                     self.model_path,
-                    timeout=30  # 30 second timeout for downloads
+                    timeout=self.timeout
                 )
             except Exception as e:
                 raise RuntimeError(f"Failed to load tokenizer for {self.model_path}: {e}")
@@ -309,91 +313,198 @@ class ChatHuggingFaceProvider(LLMProvider):
             if self._tokenizer.pad_token is None:
                 self._tokenizer.pad_token = self._tokenizer.eos_token
 
+            # Load model with timeout
             try:
                 self._model = AutoModelForCausalLM.from_pretrained(
                     self.model_path,
                     dtype="auto",
                     device_map="auto" if torch.cuda.is_available() else None,
-                    pad_token_id=self._tokenizer.eos_token_id
                 )
             except Exception as e:
                 raise RuntimeError(f"Failed to load model {self.model_path}: {e}")
 
-            # Use the compatibility layer for gradual migration
-            model_temperature = settings.model.temperature if settings.model else 1.0
-            
-            # Create transformers pipeline
-            hf_pipeline = pipeline(
-                "text-generation",
-                model=self._model,
-                tokenizer=self._tokenizer,
-                temperature=model_temperature,
-                max_new_tokens=512,
-                pad_token_id=self._tokenizer.eos_token_id,
-                **self.kwargs
-            )
-
-            # Wrap the transformers pipeline with LangChain's HuggingFacePipeline
-            self._chat_model = HuggingFacePipeline(pipeline=hf_pipeline)
-
-            print(f"✅ Successfully loaded HuggingFace model: {self.model_path}")
+            logger.info(f"✅ Successfully loaded HuggingFace model: {self.model_path}")
 
         except Exception as e:
             self._model_load_error = str(e)
-            print(f"❌ Failed to load model {self.model_path}: {e}")
+            logger.error(f"❌ Failed to load model {self.model_path}: {e}")
             raise
         finally:
             self._model_loading = False
 
+    def _convert_messages_to_hf_format(self, messages: List[Any]) -> List[Dict[str, str]]:
+        """Convert LangChain messages to HuggingFace chat format."""
+        hf_messages = []
+        
+        for msg in messages:
+            # Extract content from various message types
+            if hasattr(msg, "content"):
+                content = msg.content
+            elif isinstance(msg, dict):
+                content = msg.get("content", str(msg))
+            else:
+                content = str(msg)
+            
+            # Skip empty messages
+            if not content or not str(content).strip():
+                continue
+            
+            # Determine role from message type
+            # Check for LangChain message types first
+            if hasattr(msg, "__class__"):
+                class_name = msg.__class__.__name__
+                # LangChain uses SystemMessage, HumanMessage, AIMessage
+                if "System" in class_name or "system" in class_name.lower():
+                    role = "system"
+                elif "AI" in class_name or "Assistant" in class_name or "assistant" in class_name.lower() or "ai" in class_name.lower():
+                    role = "assistant"
+                elif "Human" in class_name or "User" in class_name or "human" in class_name.lower() or "user" in class_name.lower():
+                    role = "user"
+                else:
+                    # Default based on position: first message is usually system
+                    role = "system" if len(hf_messages) == 0 else "user"
+            elif isinstance(msg, dict):
+                # Dict format: check for 'role' key
+                role = msg.get("role", "system" if len(hf_messages) == 0 else "user")
+            else:
+                # Fallback: first message is system, rest are user
+                role = "system" if len(hf_messages) == 0 else "user"
+            
+            hf_messages.append({"role": role, "content": str(content)})
+        
+        return hf_messages
+
     async def generate_response(self, messages: List[Any], structured_output: Optional[Union[Type[BaseModel], Dict[str, Any]]] = None) -> Union[str, Any]:
-        """Generate response using HuggingFace local model."""
-        # Check if model failed to load during initialization
+        """Generate response using HuggingFace local model with chat templates."""
         if self._model_load_error:
             raise RuntimeError(f"Model failed to load during initialization: {self._model_load_error}")
 
         # Load model if not already loaded
-        if not self._chat_model: # self._tokenizer is now part of the pipeline within _chat_model
+        if not self._model or not self._tokenizer:
             try:
                 self._load_model()
             except Exception as e:
                 raise RuntimeError(f"Failed to load HuggingFace model {self.model_path}: {e}")
 
-        # Convert messages to prompt format for LangChain's LLM
-        # LangChain's HuggingFacePipeline expects a string prompt, not a list of messages
-        # We need to convert the messages to a single string.
-        # For structured output, LangChain's with_structured_output will handle the prompt modification.
-        # For regular text generation, we'll create a simple prompt.
-        
-        # Convert messages to a simple prompt string for text generation
-        # This part is needed for both structured and unstructured calls, as ainvoke expects a string
-        if len(messages) >= 2:
-            system_message = messages[0].content if hasattr(messages[0], 'content') else str(messages[0])
-            user_message = messages[-1].content if hasattr(messages[-1], 'content') else str(messages[-1])
-            prompt_string = f"System: {system_message}\n\nHuman: {user_message}\n\nAssistant:"
-        else:
-            prompt_string = str(messages[0]) if messages else ""
+        # Convert LangChain messages to HuggingFace chat format
+        hf_messages = self._convert_messages_to_hf_format(messages)
 
-        # Use structured output if requested
-        if structured_output:
-            try:
-                # LangChain's with_structured_output will handle the prompt formatting
-                structured_model = self._chat_model.with_structured_output(structured_output)
-                # ainvoke for LLMs expects a string, not a list of messages
-                response = await structured_model.ainvoke(prompt_string) 
-                return response
-            except Exception as e:
-                print(f"Warning: Structured output failed for HuggingFace, falling back to text: {e}")
-                # Fall back to regular generation
-        
-        # If no structured output or structured output failed, generate text response
         try:
-            # LangChain's HuggingFacePipeline.ainvoke expects a string
-            response = await self._chat_model.ainvoke(prompt_string)
-            return self._extract_content(response, structured_output)
+            # Apply chat template if available, otherwise fall back to simple formatting
+            if self._tokenizer.chat_template is not None:
+                # Use chat template with generation prompt
+                text = self._tokenizer.apply_chat_template(
+                    hf_messages,
+                    tokenize=False,
+                    add_generation_prompt=True,
+                )
+            else:
+                # Fallback: simple format
+                logger.warning("No chat template found, using simple format")
+                text_parts = []
+                for msg in hf_messages:
+                    if msg["role"] == "system":
+                        text_parts.append(f"System: {msg['content']}")
+                    elif msg["role"] == "user":
+                        text_parts.append(f"User: {msg['content']}")
+                    elif msg["role"] == "assistant":
+                        text_parts.append(f"Assistant: {msg['content']}")
+                text = "\n\n".join(text_parts) + "\n\nAssistant:"
+
+            # Tokenize the input
+            model_inputs = self._tokenizer([text], return_tensors="pt").to(self._model.device)
+
+            # Get model temperature from settings
+            model_temperature = (
+                settings.model.temperature 
+                if getattr(settings, "model", None) and hasattr(settings.model, "temperature") 
+                else 0.7
+            )
+
+            # Generate response in executor to avoid blocking
+            loop = asyncio.get_event_loop()
+            
+            def _generate():
+                import torch
+                with torch.no_grad():
+                    generated_ids = self._model.generate(
+                        **model_inputs,
+                        max_new_tokens=self.max_new_tokens,
+                        temperature=model_temperature,
+                        do_sample=model_temperature > 0,
+                        pad_token_id=self._tokenizer.eos_token_id,
+                        **{k: v for k, v in self.kwargs.items() if k not in ["model_path", "device", "preload_model", "max_new_tokens", "timeout"]}
+                    )
+                return generated_ids
+
+            # Generate with timeout
+            generated_ids = await asyncio.wait_for(
+                loop.run_in_executor(None, _generate),
+                timeout=self.timeout,
+            )
+
+            # Extract only the new tokens (generated part)
+            input_length = model_inputs.input_ids.shape[1]
+            output_ids = generated_ids[0][input_length:]
+            
+            # Decode the generated tokens
+            response_text = self._tokenizer.decode(output_ids, skip_special_tokens=True)
+            response_text = response_text.strip()
+            
+            # Handle structured output if requested
+            if structured_output:
+                try:
+                    import json
+                    parsed_json = None
+                    
+                    # Try to extract JSON from the response
+                    json_start = response_text.find('{')
+                    json_end = response_text.rfind('}') + 1
+                    if json_start >= 0 and json_end > json_start:
+                        json_str = response_text[json_start:json_end]
+                        try:
+                            parsed_json = json.loads(json_str)
+                        except json.JSONDecodeError:
+                            pass
+                    
+                    # If extraction failed, try parsing the whole response
+                    if parsed_json is None:
+                        try:
+                            parsed_json = json.loads(response_text)
+                        except json.JSONDecodeError:
+                            pass
+                    
+                    # If we successfully parsed JSON, format it according to structured_output type
+                    if parsed_json is not None:
+                        # If structured_output is a Pydantic model, try to instantiate it
+                        if isinstance(structured_output, type) and issubclass(structured_output, BaseModel):
+                            try:
+                                return structured_output(**parsed_json)
+                            except (TypeError, ValueError) as e:
+                                logger.warning(f"Failed to instantiate Pydantic model from JSON: {e}")
+                                return parsed_json
+                        # If it's a dict schema, return the parsed JSON
+                        elif isinstance(structured_output, dict):
+                            return parsed_json
+                        else:
+                            return parsed_json
+                    else:
+                        logger.warning(f"No valid JSON found in HuggingFace response for structured output, falling back to text")
+                        return response_text
+                except Exception as e:
+                    logger.warning(f"Failed to parse structured output from HuggingFace response, falling back to text: {e}")
+                    # Fall back to text response
+                    return response_text
+            
+            return response_text
 
         except asyncio.TimeoutError:
-            raise RuntimeError(f"Model generation timed out for {self.model_path}. The model may be overloaded or the request too complex.")
+            raise RuntimeError(
+                f"Model generation timed out for {self.model_path} after {self.timeout}s. "
+                "The model may be overloaded or the request too complex."
+            )
         except Exception as e:
+            logger.error(f"Error generating response with HuggingFace model {self.model_path}: {e}")
             raise RuntimeError(f"Error generating response with HuggingFace model {self.model_path}: {e}")
 
 

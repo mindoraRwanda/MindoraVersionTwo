@@ -18,12 +18,17 @@ SECRET_KEY = os.getenv("SECRET_KEY", "dev_default_secret_key")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 360
 
+# DEVELOPMENT ONLY: Use faster bcrypt rounds for testing
+# Production should use default (12) or higher for security
+BCRYPT_ROUNDS = int(os.getenv("BCRYPT_ROUNDS", "4"))  # 4 rounds = ~50ms, 12 rounds = ~300ms
+
 def hash_password(password: str) -> str:
     # Pre-hash with SHA-256 to handle any length password while preserving uniqueness
     # This ensures we stay within bcrypt's 72-byte limit without losing password data
     password_hash = hashlib.sha256(password.encode('utf-8')).hexdigest()
     # Use bcrypt directly to avoid passlib compatibility issues
-    salt = bcrypt.gensalt()
+    # DEVELOPMENT: Using reduced rounds for faster testing (configurable via BCRYPT_ROUNDS env var)
+    salt = bcrypt.gensalt(rounds=BCRYPT_ROUNDS)
     hashed = bcrypt.hashpw(password_hash.encode('utf-8'), salt)
     return hashed.decode('utf-8')
 

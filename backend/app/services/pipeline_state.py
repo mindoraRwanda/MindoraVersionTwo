@@ -73,6 +73,7 @@ class EmotionDetection(BaseModel):
     emotion_reason: str
     selected_emotion: str = "neutral"
     emotion_confidence: float = Field(ge=0.0, le=1.0)
+    emotion_intensity: str = "LOW"  # LOW, MEDIUM, HIGH, CRITICAL
 
 
 class QueryEvaluation(BaseModel):
@@ -100,6 +101,10 @@ class StatefulPipelineState(TypedDict):
     generated_content: str
     response_confidence: float
     response_reason: str
+    
+    # Progressive delivery / chunking
+    should_chunk: bool
+    response_chunks: List[Dict[str, Any]]
     
     # Metadata and explainability
     processing_metadata: List[ProcessingMetadata]
@@ -145,6 +150,8 @@ def create_initial_pipeline_state(
         "generated_content": "",
         "response_confidence": 0.0,
         "response_reason": "",
+        "should_chunk": False,
+        "response_chunks": [],
         "processing_metadata": [],
         "processing_steps_completed": [],
         "llm_calls_made": 0,

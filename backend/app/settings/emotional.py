@@ -1,4 +1,5 @@
 from typing import Dict
+from pydantic import ConfigDict
 from .base import BaseAppSettings
 
 class EmotionalResponseSettings(BaseAppSettings):
@@ -86,11 +87,9 @@ class EmotionalResponseSettings(BaseAppSettings):
     def emotion_responses(self) -> Dict[str, Dict[str, str]]:
         """Backward compatibility property for emotion_responses."""
         return self.emotion_guidance
-    
     @property
     def topic_adjustments(self) -> Dict[str, Dict[str, str]]:
         """Backward compatibility property for topic_adjustments."""
         return self.topic_guidance
     
-    class Config:
-        extra = "allow"  # Allow extra fields from environment
+    model_config = ConfigDict(extra="allow")  # Allow extra fields from environment

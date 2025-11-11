@@ -38,11 +38,16 @@ export const sendMessage = async (conversation_id, content) => {
     }
   );
 
+  // Debug: Log raw backend response
+  console.log('🔍 RAW BACKEND RESPONSE:', res.data);
+
   // Transform backend response to expected frontend format
   return {
     response: {
       content: res.data.content,
-      timestamp: res.data.timestamp
+      timestamp: res.data.timestamp,
+      should_chunk: res.data.should_chunk || false,
+      response_chunks: res.data.response_chunks || []
     },
     emotion: null // Backend doesn't return emotion in message response
   };

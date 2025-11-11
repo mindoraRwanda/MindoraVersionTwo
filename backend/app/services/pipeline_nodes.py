@@ -24,6 +24,14 @@ from ..prompts.cultural_context_prompts import CulturalContextPrompts
 from ..prompts.safety_prompts import SafetyPrompts
 from ..prompts.response_approach_prompts import ResponseApproachPrompts
 
+# Import ML-based emotion classifier
+from .emotion.text_emotion_classifier import TextEmotionClassifier
+from .emotion.schemas import EmotionType, EmotionIntensity
+
+# Import empathy prompt builder
+from .empathy.empathy_prompt_builder import EmpathyPromptBuilder
+from .response_chunker import ResponseChunker
+
 logger = logging.getLogger(__name__)
 
 
@@ -422,66 +430,73 @@ class CrisisDetectionNode(BasePipelineNode):
 
 
 class EmotionDetectionNode(BasePipelineNode):
-    """Node for detecting user emotions with youth-specific patterns."""
+    """Node for detecting user emotions using ML-based DistilRoBERTa classifier."""
+    
+    def __init__(self, llm_provider=None, ml_classifier=None):
+        """Initialize with optional ML classifier."""
+        super().__init__(llm_provider)
+        self.ml_classifier = ml_classifier
+        logger.info("🧠 EmotionDetectionNode initialized with ML classifier")
     
     async def execute(self, state: StatefulPipelineState) -> StatefulPipelineState:
-        """Execute emotion detection with confidence scoring."""
+        """Execute ML-based emotion detection with cultural awareness."""
         start_time = time.time()
         query = state["user_query"]
         
-        logger.info(f"😊 Starting emotion detection for query: '{query[:100]}{'...' if len(query) > 100 else ''}'")
+        logger.info(f"😊 Starting ML emotion detection for query: '{query[:100]}{'...' if len(query) > 100 else ''}'")
         
         try:
             # Get cultural context for emotion detection
             cultural_context = self._get_cultural_context(state)
-            language = cultural_context["language"]
-            emotion_responses = cultural_context["emotion_responses"]
+            user_gender = state.get("user_gender", "unknown")
+            conversation_history = state.get("conversation_history", [])
             
-            # Apply cultural integration for emotion detection
-            cultural_prompt = self._apply_cultural_integration(state, "emotion_detection")
+            # Prepare context for ML classifier
+            classifier_context = {
+                "user_gender": user_gender,
+                "language": cultural_context.get("language", "English"),
+                "conversation_history": conversation_history[-5:] if conversation_history else []  # Last 5 messages
+            }
             
-            # Use LLM for emotion detection with cultural context
-            system_prompt = f"""
-            You are an emotion detection specialist for youth mental health with cultural awareness for {language} speakers.
+            # Use ML classifier for emotion detection
+            if self.ml_classifier:
+                logger.info("🤖 Using ML DistilRoBERTa classifier for emotion detection")
+                ml_result = await self.ml_classifier.classify(
+                    text=query,
+                    context=classifier_context
+                )
+                
+                # Convert ML EmotionResult to pipeline EmotionDetection schema
+                emotion_detection = self._convert_ml_to_pipeline_schema(ml_result, query)
+                
+                # Log primary emotion with intensity and confidence
+                logger.info(f"✅ ML emotion detection: {ml_result.primary_emotion.value} "
+                          f"(intensity={ml_result.intensity.value}, confidence={ml_result.confidence:.2f})")
+                
+                # Log full probability distribution (secondary emotions)
+                if ml_result.secondary_emotions:
+                    secondary_str = ", ".join([f"{emotion}: {prob:.2f}" for emotion, prob in ml_result.secondary_emotions.items()])
+                    logger.info(f"📊 Probability distribution - Secondary emotions: {secondary_str}")
+                else:
+                    logger.info(f"📊 Probability distribution - No secondary emotions above threshold")
+                
+                # Log cultural context if detected
+                if ml_result.cultural_context:
+                    logger.info(f"🌍 Cultural context detected: {ml_result.cultural_context}")
+                else:
+                    logger.info(f"🌍 Cultural context: None detected")
+            else:
+                # Fallback to basic detection if ML classifier not available
+                logger.warning("⚠️ ML classifier not available, using fallback detection")
+                emotion_detection = EmotionDetection(
+                    emotions={"neutral": 1.0},
+                    emotion_keywords=[],
+                    emotion_reason="ML classifier not initialized, using fallback",
+                    selected_emotion="neutral",
+                    emotion_confidence=0.5,
+                    emotion_intensity="LOW"
+                )
             
-            {cultural_prompt}
-            
-            Analyze the query for emotions with cultural sensitivity:
-            1. Primary emotion and confidence score (0-1)
-            2. List of emotion keywords (including cultural expressions)
-            3. Reasoning for emotion detection
-            4. Emotion intensity level
-            5. Cultural emotional expression patterns
-            6. Youth-specific emotional language
-            
-            Consider that emotional expression varies across cultures. In Rwandan culture:
-            - Emotions may be expressed more indirectly
-            - Family and community context affects emotional expression
-            - Youth may use different emotional vocabulary
-            - Cultural stigma may influence how emotions are communicated
-            
-            Available emotion response templates for {language}:
-            {emotion_responses}
-            
-            Respond in JSON format:
-            {{
-                "emotions": {{"anxiety": 0.7, "neutral": 0.3}},
-                "keywords": ["worried", "anxious", "cultural_expression"],
-                "reasoning": "Query shows anxiety and worry with cultural context",
-                "selected_emotion": "anxiety",
-                "confidence": 0.7,
-                "cultural_emotional_indicators": ["indirect_expression", "family_context"],
-                "youth_emotional_patterns": ["peer_pressure", "academic_stress"]
-            }}
-            """
-            
-            user_prompt = f"Detect emotions in this query with cultural awareness: '{query}'"
-            logger.info(f"📝 Emotion detection prompt prepared (system: {len(system_prompt)} chars)")
-            response = await self._call_llm(system_prompt, user_prompt, state)
-            
-            # Parse response and create emotion detection
-            logger.info(f"🔍 Parsing emotion detection response: '{response[:200]}{'...' if len(response) > 200 else ''}'")
-            emotion_detection = self._parse_emotion_response(response, query)
             state["emotion_detection"] = emotion_detection
             
             processing_time = time.time() - start_time
@@ -496,10 +511,13 @@ class EmotionDetectionNode(BasePipelineNode):
                 processing_time
             )
             
-            logger.info(f"✅ Emotion detection completed: emotion={emotion_detection.selected_emotion}, confidence={emotion_detection.emotion_confidence:.2f}, keywords={emotion_detection.emotion_keywords}")
+            logger.info(f"✅ ML emotion detection completed in {processing_time:.3f}s: "
+                       f"emotion={emotion_detection.selected_emotion}, "
+                       f"confidence={emotion_detection.emotion_confidence:.2f}, "
+                       f"keywords={emotion_detection.emotion_keywords[:3]}")
             
         except Exception as e:
-            logger.error(f"❌ Emotion detection failed: {e}")
+            logger.error(f"❌ ML emotion detection failed: {e}")
             add_error(state, f"Emotion detection error: {str(e)}")
             
             # Fallback detection
@@ -508,39 +526,69 @@ class EmotionDetectionNode(BasePipelineNode):
                 emotion_keywords=[],
                 emotion_reason=f"Fallback detection due to error: {str(e)}",
                 selected_emotion="neutral",
-                emotion_confidence=0.5
+                emotion_confidence=0.5,
+                emotion_intensity="LOW"
             )
         
         return state
     
-    def _parse_emotion_response(self, response: str, query: str) -> EmotionDetection:
-        """Parse LLM response into structured emotion detection."""
-        try:
-            data = json.loads(response)
-            
-            # Extract cultural emotional indicators and youth patterns
-            cultural_indicators = data.get("cultural_emotional_indicators", [])
-            youth_patterns = data.get("youth_emotional_patterns", [])
-            keywords = data.get("keywords", [])
-            
-            # Combine keywords with cultural elements
-            all_keywords = keywords + cultural_indicators + youth_patterns
-            
-            return EmotionDetection(
-                emotions=data.get("emotions", {"neutral": 1.0}),
-                emotion_keywords=all_keywords,
-                emotion_reason=data.get("reasoning", "Emotion detection completed with cultural context"),
-                selected_emotion=data.get("selected_emotion", "neutral"),
-                emotion_confidence=float(data.get("confidence", 0.5))
-            )
-        except (json.JSONDecodeError, ValueError, KeyError):
-            return EmotionDetection(
-                emotions={"neutral": 1.0},
-                emotion_keywords=["cultural_context", "youth_patterns"],
-                emotion_reason="Emotion detection completed with cultural context",
-                selected_emotion="neutral",
-                emotion_confidence=0.5
-            )
+    def _convert_ml_to_pipeline_schema(self, ml_result, query: str) -> EmotionDetection:
+        """
+        Convert ML classifier's EmotionResult to pipeline's EmotionDetection schema.
+        
+        Maps:
+        - EmotionResult.primary_emotion → EmotionDetection.selected_emotion
+        - EmotionResult.confidence → EmotionDetection.emotion_confidence
+        - EmotionResult.secondary_emotions → EmotionDetection.emotions (multi-label probabilities)
+        - EmotionResult.intensity + cultural_context → EmotionDetection.emotion_keywords
+        """
+        # Build emotion probability dictionary
+        emotions = {ml_result.primary_emotion.value: ml_result.confidence}
+        
+        # Add secondary emotions if available
+        if ml_result.secondary_emotions:
+            emotions.update(ml_result.secondary_emotions)
+        
+        # Extract keywords from intensity and cultural markers
+        keywords = []
+        keywords.append(f"intensity_{ml_result.intensity.value}")
+        
+        if ml_result.cultural_context:
+            keywords.append("cultural_marker_detected")
+            keywords.append("kinyarwanda_expression")
+        
+        # Add intensity-based keywords
+        intensity_keywords = {
+            EmotionIntensity.LOW: ["mild", "subtle"],
+            EmotionIntensity.MEDIUM: ["moderate", "noticeable"],
+            EmotionIntensity.HIGH: ["strong", "elevated"],
+            EmotionIntensity.CRITICAL: ["severe", "crisis_level"]
+        }
+        keywords.extend(intensity_keywords.get(ml_result.intensity, []))
+        
+        # Build reasoning string
+        reasoning_parts = [
+            f"ML classifier detected {ml_result.primary_emotion.value} with {ml_result.confidence:.1%} confidence",
+            f"Intensity level: {ml_result.intensity.value}"
+        ]
+        
+        if ml_result.cultural_context:
+            reasoning_parts.append(f"Cultural context: {ml_result.cultural_context}")
+        
+        if ml_result.secondary_emotions:
+            secondary_str = ", ".join([f"{e}={s:.2f}" for e, s in ml_result.secondary_emotions.items()])
+            reasoning_parts.append(f"Secondary emotions: {secondary_str}")
+        
+        reasoning = ". ".join(reasoning_parts)
+        
+        return EmotionDetection(
+            emotions=emotions,
+            emotion_keywords=keywords,
+            emotion_reason=reasoning,
+            selected_emotion=ml_result.primary_emotion.value,
+            emotion_confidence=ml_result.confidence,
+            emotion_intensity=ml_result.intensity.value  # Add intensity from ML result
+        )
 
 
 class QueryEvaluationNode(BasePipelineNode):
@@ -677,22 +725,29 @@ class EmpathyNode(BasePipelineNode):
     """Node for generating empathetic responses."""
     
     async def execute(self, state: StatefulPipelineState) -> StatefulPipelineState:
-        """Generate empathetic response with cultural context."""
+        """Generate empathetic response with emotion-aware cultural context."""
         start_time = time.time()
         query = state["user_query"]
-        emotion = state.get("emotion_detection")
+        emotion_detection = state.get("emotion_detection")
+        
+        # Extract emotion details from detection
+        emotion_type = EmotionType.NEUTRAL  # Default
+        emotion_intensity = EmotionIntensity.LOW  # Default
+        
+        if emotion_detection:
+            try:
+                emotion_type = EmotionType(emotion_detection.selected_emotion)
+                emotion_intensity = EmotionIntensity(emotion_detection.emotion_intensity)
+            except (ValueError, AttributeError) as e:
+                logger.warning(f"⚠️ Could not parse emotion from detection: {e}, using defaults")
         
         logger.info(f"💝 Starting empathy response generation for query: '{query[:100]}{'...' if len(query) > 100 else ''}'")
-        logger.info(f"😊 Detected emotion: {emotion.selected_emotion if emotion else 'neutral'}")
+        logger.info(f"😊 Detected emotion: {emotion_type.value} (intensity: {emotion_intensity.value})")
         
         try:
-            # Get cultural context for empathy response
+            # Get cultural context for additional integration
             cultural_context = self._get_cultural_context(state)
             language = cultural_context["language"]
-            emotion_responses = cultural_context["emotion_responses"]
-            
-            # Apply cultural integration for empathy response
-            cultural_prompt = self._apply_cultural_integration(state, "empathy_response")
             
             # Get gender-aware addressing
             gender_addressing = self._get_gender_aware_addressing(state)
@@ -701,67 +756,88 @@ class EmpathyNode(BasePipelineNode):
             knowledge_context = state.get("knowledge_context", "")
             rag_applied = state.get("rag_enhancement_applied", False)
             
-            # Generate empathetic response with cultural context and RAG knowledge
+            # Build context dict for empathy prompt builder
+            empathy_context = {
+                "user_gender": state.get("user_profile", {}).get("gender", "unknown"),
+                "language": language,
+                "gender_addressing": gender_addressing
+            }
+            
+            # Use EmpathyPromptBuilder to create emotion-specific guidance
+            empathy_guidance = EmpathyPromptBuilder.build_empathy_prompt(
+                emotion=emotion_type,
+                intensity=emotion_intensity,
+                user_message=query,
+                context=empathy_context
+            )
+            
+            logger.info(f"🎯 Empathy guidance built for {emotion_type.value} at {emotion_intensity.value} intensity")
+            
+            # Build complete system prompt with empathy guidance and RAG knowledge
             system_prompt = f"""
-                   You are generating an empathetic response with cultural awareness for {language} speakers.
-                   
-                   {cultural_prompt}
-                   
-                   Generate a culturally sensitive, supportive response that:
-                   1. Uses appropriate cultural expressions and terminology
-                   2. Incorporates Ubuntu philosophy ("I am because we are")
-                   3. Shows understanding of family and community context
-                   4. Uses gender-aware addressing: {gender_addressing if gender_addressing else "friend"}
-                   5. Considers cultural stigma around mental health
-                   6. Provides hope and community support
-                   
-                   Available emotion response templates for {language}:
-                   {emotion_responses}
-                   
-                   {f"Relevant Mental Health Knowledge: {knowledge_context}" if rag_applied and knowledge_context else ""}
-                   
-                   Make the response feel authentic and relatable to Rwandan youth.
-                   Use the available knowledge to provide informed, evidence-based support while maintaining cultural sensitivity.
-                   """
+You are a culturally-aware mental health support assistant for Rwandan youth.
+
+{empathy_guidance}
+
+Additional Context:
+- Language: {language}
+- Gender Addressing: {gender_addressing if gender_addressing else "friend"}
+- Ubuntu Philosophy: Remember "I am because we are" - community is central
+
+{f"Relevant Mental Health Knowledge: {knowledge_context}" if rag_applied and knowledge_context else ""}
+
+Use the empathy principles above to guide your response. Speak naturally and authentically.
+Integrate Kinyarwanda phrases where appropriate, but let them flow naturally in the conversation.
+Use the mental health knowledge to provide informed, evidence-based support.
+"""
             
-            user_prompt = f"""
-            Generate an empathetic response for this query:
-            Query: "{query}"
-            Detected Emotion: {emotion.selected_emotion if emotion else "neutral"}
-            Language: {language}
-            Gender Addressing: {gender_addressing if gender_addressing else "friend"}
+            user_prompt = f'Generate your empathetic response to: "{query}"'
             
-            Provide culturally sensitive, supportive response that feels authentic.
-            """
-            
-            logger.info(f"📝 Empathy prompt prepared (system: {len(system_prompt)} chars)")
+            logger.info(f"📝 Empathy prompt prepared with emotion-specific guidance")
             response = await self._call_llm(system_prompt, user_prompt, state)
             
             # Validate cultural appropriateness
             is_culturally_appropriate = self._validate_cultural_appropriateness(response, state)
             
             state["generated_content"] = response
-            state["response_confidence"] = 0.8 if is_culturally_appropriate else 0.6
-            state["response_reason"] = f"Generated empathetic response with cultural sensitivity (appropriateness: {'high' if is_culturally_appropriate else 'medium'})"
-            
+            state["response_confidence"] = 0.9 if is_culturally_appropriate else 0.7
+            state["response_reason"] = f"Generated emotion-aware empathetic response for {emotion_type.value} at {emotion_intensity.value} intensity (culturally appropriate: {is_culturally_appropriate})"
+
             processing_time = time.time() - start_time
-            
-            # Add metadata
+
+            # Add metadata with emotion details
             state = add_processing_metadata(
                 state,
                 "empathy_response",
-                0.8,
-                "Generated empathetic response with cultural context",
-                ["empathy", "support"],
+                0.9 if is_culturally_appropriate else 0.7,
+                f"Generated {emotion_type.value} empathy response (intensity: {emotion_intensity.value})",
+                ["empathy", "support", emotion_type.value, emotion_intensity.value],
                 processing_time
             )
-            
-            logger.info(f"✅ Empathy response generated: {len(response)} chars, confidence=0.8")
+
+            # Create progressive chunks for frontend delivery
+            try:
+                chunks = ResponseChunker.chunk_response(response, emotion_intensity.value if emotion_intensity else "MEDIUM")
+                if chunks:
+                    # Attach chunk metadata for the sender/frontend
+                    state["should_chunk"] = True
+                    state["response_chunks"] = chunks
+                    logger.info(f"📦 Created {len(chunks)} progressive chunks for delivery (intensity: {emotion_intensity.value})")
+                else:
+                    state["should_chunk"] = False
+                    state["response_chunks"] = []
+                    logger.warning(f"⚠️ No chunks created (empty response?)")
+            except Exception as e:
+                logger.warning(f"⚠️ Response chunking failed: {e}")
+                state["should_chunk"] = False
+                state["response_chunks"] = []
+
+            logger.info(f"✅ Empathy response generated: {len(response)} chars, emotion={emotion_type.value}, intensity={emotion_intensity.value}, confidence={0.9 if is_culturally_appropriate else 0.7}")
             
         except Exception as e:
             logger.error(f"❌ Empathy response generation failed: {e}")
             add_error(state, f"Empathy response error: {str(e)}")
-            state["generated_content"] = "I understand you're going through a difficult time. I'm here to support you."
+            state["generated_content"] = "I understand you're going through a difficult time. I'm here to support you. Turi kumwe (we are together)."
         
         return state
 

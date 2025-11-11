@@ -3,6 +3,7 @@ import { sendMessage } from '../api/api';
 import Message from './Message';
 import Sidebar from './Sidebar';
 import WelcomeScreen from './WelcomeScreen';
+import TypingIndicator from './TypingIndicator';
 import useChatAPI from './useChatAPI';
 import './ChatDashboard.css';
 
@@ -13,6 +14,7 @@ export default function ChatDashboard() {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
+  const [isTyping, setIsTyping] = useState(false);
   const [error, setError] = useState(null);
   const [isLoadingConversations, setIsLoadingConversations] = useState(true);
   const [hasStartedChat, setHasStartedChat] = useState(false);
@@ -120,7 +122,7 @@ export default function ChatDashboard() {
   }, []);
 
   /**
-    * Handles sending a message to the chatbot
+    * Handles sending a message to the chatbot with progressive delivery
     * @param {string} messageContent - The message content to send
     */
   const handleSend = useCallback(async () => {
@@ -149,14 +151,65 @@ export default function ChatDashboard() {
         throw new Error('Invalid bot response');
       }
 
-      const botMsg = {
-        sender: 'bot',
-        content: res.response.content,
-        timestamp: res.response.timestamp || new Date().toISOString(),
-        emotion: res.emotion || null
-      };
+      const { content, timestamp, should_chunk, response_chunks } = res.response;
 
-      setMessages(prev => [...prev, botMsg]);
+      // Debug: Log chunk data
+      console.log('🔍 CHUNK DATA:', {
+        should_chunk,
+        response_chunks,
+        num_chunks: response_chunks?.length || 0,
+        first_chunk: response_chunks?.[0] || null
+      });
+      console.log('🔍 Full response object:', res);
+
+      // Check if we should use progressive delivery
+      if (should_chunk && response_chunks && response_chunks.length > 0) {
+        console.log('✅ USING PROGRESSIVE DELIVERY - Separate message bubbles');
+        setLoading(false);
+        setIsTyping(true);
+
+        // Progressive delivery: render each chunk as a SEPARATE message bubble
+        for (let i = 0; i < response_chunks.length; i++) {
+          const chunk = response_chunks[i];
+          
+          console.log(`📦 Chunk ${i + 1}/${response_chunks.length}: "${chunk.text}" (delay: ${chunk.delay}s)`);
+          
+          // Wait for the backend-suggested delay (convert to milliseconds)
+          await new Promise(resolve => setTimeout(resolve, chunk.delay * 1000));
+          
+          // Create a SEPARATE message for each chunk
+          const chunkMessage = {
+            sender: 'bot',
+            content: chunk.text, // Individual chunk text only
+            timestamp: new Date().toISOString(),
+            emotion: res.emotion || null,
+            isChunk: true, // Flag to identify chunk messages
+            chunkIndex: i + 1,
+            totalChunks: response_chunks.length
+          };
+
+          // Add each chunk as a NEW separate message
+          setMessages(prev => [...prev, chunkMessage]);
+          
+          // Show typing indicator between chunks (except after last chunk)
+          if (i < response_chunks.length - 1) {
+            setIsTyping(true);
+          }
+        }
+
+        setIsTyping(false);
+      } else {
+        // No chunking: render full message immediately
+        console.log('⚠️ NO CHUNKING - Rendering full message instantly');
+        const botMsg = {
+          sender: 'bot',
+          content: content,
+          timestamp: timestamp || new Date().toISOString(),
+          emotion: res.emotion || null
+        };
+
+        setMessages(prev => [...prev, botMsg]);
+      }
     } catch (err) {
       handleError(err, 'Failed to send message');
       // Restore user message if sending failed
@@ -164,6 +217,7 @@ export default function ChatDashboard() {
       setInput(input); // Restore the input
     } finally {
       setLoading(false);
+      setIsTyping(false);
     }
   }, [input, selectedChat, handleError, hasStartedChat]);
 
@@ -234,11 +288,7 @@ export default function ChatDashboard() {
                   isUser={msg.sender === 'user'}
                 />
               ))}
-              {loading && (
-                <div className="message bot">
-                  Mindora is typing...
-                </div>
-              )}
+              {(loading || isTyping) && <TypingIndicator />}
               <div ref={messagesEndRef} />
             </div>
 

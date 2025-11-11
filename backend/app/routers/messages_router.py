@@ -195,11 +195,20 @@ async def send_message(
     print(f"🏁 Total pipeline time: {total_time:.3f}s")
     print(f"📊 Breakdown: DB({db_lookup_time + history_time + db_save_time:.3f}s) | LLM/Validation({total_time - (db_lookup_time + history_time + db_save_time):.3f}s)")
 
+    # Debug: Log chunking info
+    should_chunk = pipeline_result.get("should_chunk", False)
+    response_chunks = pipeline_result.get("response_chunks", [])
+    print(f"📦 API Response - should_chunk: {should_chunk}, chunks: {len(response_chunks)}")
+    if response_chunks:
+        print(f"📦 First chunk preview: {response_chunks[0] if response_chunks else 'None'}")
+
     return {
         "id": bot_msg.uuid,
         "sender": bot_msg.sender,
         "content": bot_msg.content,
-        "timestamp": bot_msg.timestamp
+        "timestamp": bot_msg.timestamp,
+        "should_chunk": pipeline_result.get("should_chunk", False),
+        "response_chunks": pipeline_result.get("response_chunks", [])
     }
 
 

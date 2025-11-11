@@ -1,5 +1,5 @@
 from pydantic import BaseModel, EmailStr, constr
-from typing import Annotated, List, Optional
+from typing import Annotated, List, Optional, Dict, Any
 from datetime import datetime
 from uuid import UUID
 # Legacy chatbot_insights_pipeline import removed
@@ -37,6 +37,8 @@ class MessageOut(BaseModel):
     sender: str
     content: str
     timestamp: datetime
+    should_chunk: bool = False
+    response_chunks: List[Dict[str, Any]] = []
 
     class Config:
         from_attributes = True  # for Pydantic v2 (replaces orm_mode)

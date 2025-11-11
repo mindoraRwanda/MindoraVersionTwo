@@ -1,4 +1,5 @@
 from typing import Dict, Any
+from pydantic import ConfigDict
 from .base import BaseAppSettings
 
 class CulturalSettings(BaseAppSettings):
@@ -72,9 +73,7 @@ Now, just notice:
 - 1 thing you can physically feel
 
 You're here, you're breathing, and you've got this moment."""
-    
     # Fallback response
     fallback_response: str = "I can hear how tough this is for you. Sometimes it helps to talk about what's going on, or we could try some simple things to help you feel a bit more steady. What would help you most right now?"
     
-    class Config:
-        extra = "allow"  # Allow extra fields from environment
+    model_config = ConfigDict(extra="allow")  # Allow extra fields from environment

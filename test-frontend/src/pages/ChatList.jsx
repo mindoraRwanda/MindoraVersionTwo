@@ -162,9 +162,19 @@ export default function ChatList() {
       `}</style>
 
       <h2 className="chatlist-header">Your Conversations</h2>
-      <button className="new-chat-btn" onClick={handleNewChat}>
-        + Start New Chat
-      </button>
+      
+      <div style={{ display: 'flex', gap: '10px', marginBottom: '20px' }}>
+        <button className="new-chat-btn" onClick={handleNewChat}>
+          + Start New Chat
+        </button>
+        <button 
+          className="new-chat-btn" 
+          onClick={() => navigate('/metrics')}
+          style={{ background: 'linear-gradient(to right, #059669, #047857)' }}
+        >
+          📊 View Metrics
+        </button>
+      </div>
 
       {error && <p className="error-msg">{error}</p>}
 

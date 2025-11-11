@@ -38,11 +38,16 @@ const Message = ({ message, isUser }) => {
   };
 
   return (
-    <div className={`message ${isUser ? 'user' : 'bot'}`}>
+    <div className={`message ${isUser ? 'user' : 'bot'} ${message.isChunk ? 'is-chunk' : ''}`}>
       {renderContent()}
       {!isUser && message.emotion && (
         <div style={{ fontSize: '12px', marginTop: '6px', color: '#6b7280' }}>
           Emotion detected: <strong>{message.emotion}</strong>
+        </div>
+      )}
+      {!isUser && message.isChunk && (
+        <div style={{ fontSize: '10px', marginTop: '4px', color: '#9ca3af', fontStyle: 'italic' }}>
+          Part {message.chunkIndex}/{message.totalChunks}
         </div>
       )}
     </div>

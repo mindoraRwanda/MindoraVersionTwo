@@ -25,6 +25,12 @@ from .rag_enhancement_node import RAGEnhancementNode
 from ..settings import settings
 from ..prompts.cultural_context_prompts import CulturalContextPrompts
 
+# Import ML emotion classifier
+from .emotion.text_emotion_classifier import TextEmotionClassifier
+
+# Import metrics trackers
+from .metrics import EmotionMetricsTracker, PipelineMetricsTracker
+
 logger = logging.getLogger(__name__)
 
 
@@ -33,22 +39,47 @@ class StatefulMentalHealthPipeline:
     Main orchestrator for the stateful LangGraph mental health pipeline.
     
     This class manages the complete workflow from query validation through
-    response generation with full explainability and state management.
+    response generation, with explainability and state tracking.
     """
-    
+
     def __init__(self, llm_provider=None, rag_service=None):
         """Initialize the stateful pipeline with LLM provider and RAG service."""
-        logger.info("🔧 Initializing StatefulMentalHealthPipeline...")
+        import time
+        pipeline_start = time.time()
+        
+        logger.info("🔧 [PIPELINE] Initializing StatefulMentalHealthPipeline...")
         self.llm_provider = llm_provider
         self.rag_service = rag_service
         self.cultural_prompts = CulturalContextPrompts()
-        logger.info("📚 Cultural context prompts loaded")
+        logger.info("📚 [PIPELINE] Cultural context prompts loaded")
+        
+        # Initialize ML emotion classifier
+        logger.info("🧠 [PIPELINE] Initializing ML emotion classifier (DistilRoBERTa)...")
+        emotion_start = time.time()
+        try:
+            self.ml_emotion_classifier = TextEmotionClassifier()
+            emotion_time = time.time() - emotion_start
+            logger.info(f"✅ [PIPELINE] ML emotion classifier initialized successfully in {emotion_time:.2f}s")
+        except Exception as e:
+            logger.error(f"❌ [PIPELINE] Failed to initialize ML emotion classifier: {e}")
+            self.ml_emotion_classifier = None
+            logger.warning("⚠️ [PIPELINE] Falling back to LLM-based emotion detection")
+        
+        # Initialize metrics trackers
+        logger.info("📊 [PIPELINE] Initializing metrics trackers...")
+        self.emotion_metrics = EmotionMetricsTracker()
+        self.pipeline_metrics = PipelineMetricsTracker()
+        logger.info("✅ [PIPELINE] Metrics trackers initialized")
         
         # Initialize node instances
-        logger.info("🏗️  Initializing pipeline nodes...")
+        logger.info("🏗️  [PIPELINE] Initializing pipeline nodes...")
         self.query_validation_node = QueryValidationNode(self.llm_provider)
         self.crisis_detection_node = CrisisDetectionNode(self.llm_provider)
-        self.emotion_detection_node = EmotionDetectionNode(self.llm_provider)
+        # Pass ML classifier to emotion detection node
+        self.emotion_detection_node = EmotionDetectionNode(
+            llm_provider=self.llm_provider,
+            ml_classifier=self.ml_emotion_classifier
+        )
         self.query_evaluation_node = QueryEvaluationNode(self.llm_provider)
         self.elaboration_node = ElaborationNode(self.llm_provider)
         self.empathy_node = EmpathyNode(self.llm_provider)
@@ -58,20 +89,25 @@ class StatefulMentalHealthPipeline:
         self.idle_node = IdleNode(self.llm_provider)
         self.crisis_alert_node = CrisisAlertNode(self.llm_provider)
         self.generate_response_node = GenerateResponseNode(self.llm_provider)
+        self.idle_node = IdleNode(self.llm_provider)
+        self.crisis_alert_node = CrisisAlertNode(self.llm_provider)
+        self.generate_response_node = GenerateResponseNode(self.llm_provider)
         
         # Initialize RAG enhancement node if RAG service is available
         if self.rag_service:
             self.rag_enhancement_node = RAGEnhancementNode(self.rag_service)
-            logger.info("🔍 RAG enhancement node initialized")
+            logger.info("🔍 [PIPELINE] RAG enhancement node initialized")
         else:
             self.rag_enhancement_node = None
-            logger.info("⚠️ RAG service not available, skipping RAG enhancement node")
+            logger.info("⚠️ [PIPELINE] RAG service not available, skipping RAG enhancement node")
         
-        logger.info("✅ All pipeline nodes initialized")
+        logger.info("✅ [PIPELINE] All pipeline nodes initialized")
         
-        logger.info("🕸️  Building LangGraph workflow...")
+        logger.info("🕸️  [PIPELINE] Building LangGraph workflow...")
         self.graph = self._build_pipeline_graph()
-        logger.info("✅ StatefulMentalHealthPipeline initialization complete")
+        
+        pipeline_time = time.time() - pipeline_start
+        logger.info(f"✅ [PIPELINE] StatefulMentalHealthPipeline initialization complete in {pipeline_time:.2f}s")
         
     def _build_pipeline_graph(self) -> StateGraph:
         """Build the LangGraph StateGraph with all nodes and routing logic."""
@@ -319,11 +355,62 @@ class StatefulMentalHealthPipeline:
             logger.info(f"   ❌ Errors encountered: {len(final_state.get('errors', []))}")
             
             if final_state.get('errors'):
-                logger.warning(f"   ⚠️  Error details: {final_state.get('errors', [])}")
+                logger.warning(f"   ⚠️  Error  details: {final_state.get('errors', [])}")
             
             # Extract results
             results = self._extract_results(final_state, processing_time)
             logger.info(f"📤 Pipeline results extracted: response length={len(results.get('response', ''))} chars, confidence={results.get('response_confidence', 0):.2f}")
+            
+            # Track pipeline metrics
+            try:
+                emotion_det = final_state.get("emotion_detection")
+                crisis_assess = final_state.get("crisis_assessment")
+                query_eval = final_state.get("query_evaluation")
+                
+                # Safely extract strategy (it's called evaluation_type in QueryEvaluation)
+                strategy_used = "unknown"
+                if query_eval:
+                    if hasattr(query_eval, 'evaluation_type'):
+                        strategy_used = query_eval.evaluation_type.value if hasattr(query_eval.evaluation_type, 'value') else str(query_eval.evaluation_type)
+                    elif hasattr(query_eval, 'strategy'):
+                        strategy_used = query_eval.strategy.value if hasattr(query_eval.strategy, 'value') else str(query_eval.strategy)
+                
+                # Safely extract crisis severity
+                crisis_severity = "none"
+                if crisis_assess:
+                    if hasattr(crisis_assess, 'crisis_severity'):
+                        crisis_severity = crisis_assess.crisis_severity.value if hasattr(crisis_assess.crisis_severity, 'value') else str(crisis_assess.crisis_severity)
+                    elif hasattr(crisis_assess, 'severity'):
+                        crisis_severity = crisis_assess.severity.value if hasattr(crisis_assess.severity, 'value') else str(crisis_assess.severity)
+                
+                # Safely extract emotion
+                detected_emotion = "unknown"
+                if emotion_det:
+                    if hasattr(emotion_det, 'selected_emotion'):
+                        detected_emotion = emotion_det.selected_emotion.value if hasattr(emotion_det.selected_emotion, 'value') else str(emotion_det.selected_emotion)
+                    elif hasattr(emotion_det, 'primary_emotion'):
+                        detected_emotion = emotion_det.primary_emotion.value if hasattr(emotion_det.primary_emotion, 'value') else str(emotion_det.primary_emotion)
+                
+                self.pipeline_metrics.track(
+                    user_id=str(user_id or "unknown"),
+                    message_id=str(final_state.get("message_id", "unknown")),
+                    query_length=len(query),
+                    total_time_ms=processing_time * 1000,
+                    llm_calls=final_state.get("llm_calls_made", 0),
+                    errors=len(final_state.get("errors", [])),
+                    steps_completed=final_state.get("processing_steps_completed", []),
+                    response_length=len(results.get("response", "")),
+                    response_confidence=results.get("response_confidence", 0.0),
+                    strategy=strategy_used,
+                    crisis_severity=crisis_severity,
+                    detected_emotion=detected_emotion
+                )
+                logger.info(f"📊 Pipeline metrics tracked: strategy={strategy_used}, crisis={crisis_severity}, emotion={detected_emotion}")
+            except Exception as e:
+                logger.warning(f"⚠️ Failed to track pipeline metrics: {e}")
+                import traceback
+                logger.debug(f"Traceback: {traceback.format_exc()}")
+            
             return results
             
         except Exception as e:
@@ -336,6 +423,8 @@ class StatefulMentalHealthPipeline:
         """Extract and format results from final state."""
         return {
             "response": state.get("generated_content", "I'm here to support you."),
+            "should_chunk": state.get("should_chunk", False),
+            "response_chunks": state.get("response_chunks", []),
             "response_confidence": state.get("response_confidence", 0.0),
             "response_reason": state.get("response_reason", ""),
             "processing_metadata": [
@@ -385,7 +474,28 @@ class StatefulMentalHealthPipeline:
     
     async def _emotion_detection_node(self, state: StatefulPipelineState) -> StatefulPipelineState:
         logger.info("😊 [PIPELINE] Executing Emotion Detection Node")
+        start_time = time.time()
         result = await self.emotion_detection_node.execute(state)
+        processing_time_ms = (time.time() - start_time) * 1000
+        
+        # Track emotion metrics
+        if result.get("emotion_detection"):
+            emotion_det = result["emotion_detection"]
+            try:
+                self.emotion_metrics.track(
+                    user_id=str(result.get("user_id", "unknown")),
+                    message_id=str(result.get("message_id", "unknown")),
+                    text=result.get("user_query", ""),
+                    primary_emotion=emotion_det.selected_emotion,
+                    confidence=emotion_det.emotion_confidence,
+                    intensity=result.get("emotion_intensity", "unknown"),
+                    processing_time_ms=processing_time_ms,
+                    secondary_emotions=result.get("emotion_secondary", {}),
+                    cultural_context=result.get("emotion_cultural_context")
+                )
+            except Exception as e:
+                logger.warning(f"⚠️ Failed to track emotion metrics: {e}")
+        
         logger.info("✅ [PIPELINE] Emotion Detection Node completed")
         return result
     

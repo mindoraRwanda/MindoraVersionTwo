@@ -1,6 +1,6 @@
 from typing import List
 import re
-from pydantic import validator
+from pydantic import field_validator, ConfigDict
 from .base import BaseAppSettings
 
 class SafetySettings(BaseAppSettings):
@@ -62,17 +62,16 @@ class SafetySettings(BaseAppSettings):
         r'end\s+your\s+life'
     ]
     
-    @validator('crisis_keywords', 'substance_abuse_keywords', 'self_injury_keywords', 
-               'illegal_content_keywords', 'jailbreak_keywords', 'inappropriate_relationship_keywords',
-               'medical_advice_keywords', 'mental_health_indicators', 'simple_greetings',
-               pre=True)
+    @field_validator('crisis_keywords', 'substance_abuse_keywords', 'self_injury_keywords',
+                    'illegal_content_keywords', 'jailbreak_keywords', 'inappropriate_relationship_keywords',
+                    'medical_advice_keywords', 'mental_health_indicators', 'simple_greetings', mode='before')
     def parse_string_list(cls, v):
         """Parse comma-separated string into list."""
         if isinstance(v, str):
             return [item.strip() for item in v.split(',') if item.strip()]
         return v
     
-    @validator('injection_patterns', 'unsafe_output_patterns', pre=True)
+    @field_validator('injection_patterns', 'unsafe_output_patterns', mode='before')
     def parse_regex_list(cls, v):
         """Parse pipe-separated string into list of regex patterns."""
         if isinstance(v, str):
@@ -95,5 +94,5 @@ class SafetySettings(BaseAppSettings):
         patterns = getattr(self, attr, []) or []
         return [re.compile(p, re.IGNORECASE) for p in patterns]
     
-    class Config:
-        extra = "allow"  # Allow extra fields from environment
+    # Pydantic V2 model configuration
+    model_config = ConfigDict(extra="allow")  # Allow extra fields from environment

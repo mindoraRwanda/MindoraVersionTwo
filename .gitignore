@@ -21,6 +21,7 @@ wheels/
 .installed.cfg
 *.egg
 venv/
+mindoraenv/
 backend/venv/
 .env
 .venv

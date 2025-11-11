@@ -1,4 +1,5 @@
 from typing import Optional
+from pydantic import ConfigDict
 from .base import BaseAppSettings
 
 class QdrantSettings(BaseAppSettings):
@@ -10,5 +11,4 @@ class QdrantSettings(BaseAppSettings):
     qdrant_grpc_port: int = 6334
     qdrant_api_key: Optional[str] = None
 
-    class Config:
-        extra = "allow"  # Allow extra fields from environment
+    model_config = ConfigDict(extra="allow")  # Allow extra fields from environment

@@ -1,5 +1,5 @@
 from typing import Optional
-from pydantic import validator
+from pydantic import field_validator, ConfigDict
 from .base import BaseAppSettings
 
 class DatabaseSettings(BaseAppSettings):
@@ -18,12 +18,12 @@ class DatabaseSettings(BaseAppSettings):
     redis_url: Optional[str] = None
     redis_ttl: int = 3600
     
-    @validator('database_pool_size', 'database_max_overflow', 'database_pool_timeout',
-               'database_pool_recycle', 'redis_ttl')
+    @field_validator('database_pool_size', 'database_max_overflow', 'database_pool_timeout',
+                    'database_pool_recycle', 'redis_ttl')
     def validate_positive_int(cls, v):
         if v <= 0:
             raise ValueError('Value must be positive')
         return v
     
-    class Config:
-        extra = "allow"  # Allow extra fields from environment
+    # Pydantic V2 model configuration
+    model_config = ConfigDict(extra="allow")  # Allow extra fields from environment

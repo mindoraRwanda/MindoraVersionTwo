@@ -232,6 +232,24 @@
   margin-bottom: 8px;
 }
 
+/* Chunk message styling with slide-in animation */
+.message.is-chunk {
+  animation: slideInFromLeft 0.3s ease-out;
+  margin-bottom: 6px; /* Tighter spacing between chunks */
+}
+
+/* Slide-in animation for chunks */
+@keyframes slideInFromLeft {
+  from {
+    opacity: 0;
+    transform: translateX(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
 .user {
   align-self: flex-end;
   background: rgb(109, 40, 217);

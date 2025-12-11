@@ -29,6 +29,14 @@ def _map_severity(sev: str) -> CrisisSeverity:
     }.get(sev, CrisisSeverity.low)
 
 def _primary_therapist(db: Session, user_id) -> Therapist | None:
+    # Ensure user_id is a UUID object if it's a string
+    import uuid
+    if isinstance(user_id, str):
+        try:
+            user_id = uuid.UUID(user_id)
+        except ValueError:
+            pass # Let SQLAlchemy handle it or fail gracefully
+
     link = db.execute(
         select(UserTherapist).where(
             UserTherapist.user_id == user_id,
@@ -97,6 +105,15 @@ def log_crisis_and_notify(
 
     if therapist and therapist.active and therapist.email:
         logger.info(f"🚨 log_crisis_and_notify: Therapist is active with email: {therapist.email}")
+        
+        # Ensure user_id is a UUID object if it's a string
+        import uuid
+        if isinstance(user_id, str):
+            try:
+                user_id = uuid.UUID(user_id)
+            except ValueError:
+                pass
+
         patient = db.get(User, user_id)
         case_url = f"{os.getenv('ADMIN_DASHBOARD_URL', 'https://your-admin.app')}/cases/{crisis.id}"
         logger.info(f"🚨 log_crisis_and_notify: Case URL: {case_url}")

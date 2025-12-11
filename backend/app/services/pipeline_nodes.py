@@ -27,6 +27,7 @@ from ..prompts.safety_prompts import SafetyPrompts
 from ..prompts.response_approach_prompts import ResponseApproachPrompts
 from .crisis_classifier import classify_crisis
 from .safety_pipeline import log_crisis_and_notify
+from .text_emotion_classifier import TextEmotionClassifier
 from pydantic import BaseModel, Field
 
 
@@ -496,6 +497,10 @@ class CrisisDetectionNode(BasePipelineNode):
 class EmotionDetectionNode(BasePipelineNode):
     """Node for detecting user emotions with youth-specific patterns."""
     
+    def __init__(self, llm_provider=None):
+        super().__init__(llm_provider)
+        self.classifier = TextEmotionClassifier()
+
     async def execute(self, state: StatefulPipelineState) -> StatefulPipelineState:
         """Execute emotion detection with confidence scoring."""
         start_time = time.time()
@@ -504,70 +509,38 @@ class EmotionDetectionNode(BasePipelineNode):
         logger.info(f"😊 Starting emotion detection for query: '{query[:100]}{'...' if len(query) > 100 else ''}'")
         
         try:
-            # Get cultural context for emotion detection
-            cultural_context = self._get_cultural_context(state)
-            language = cultural_context["language"]
-            emotion_responses = cultural_context["emotion_responses"]
+            # Use Hybrid Classifier
+            result = self.classifier.detect_emotion(query)
             
-            # Apply cultural integration for emotion detection
-            cultural_prompt = self._apply_cultural_integration(state, "emotion_detection")
+            # Construct reasoning
+            reasoning = f"Detected {result['selected_emotion']} ({result['intensity']}) with {result['confidence']:.2f} confidence."
+            if result['cultural_markers']:
+                reasoning += f" Found cultural markers: {', '.join(result['cultural_markers'])}."
             
-            # Use LLM for emotion detection with cultural context
-            system_prompt = f"""
-            You are an emotion detection specialist for youth mental health with cultural awareness for {language} speakers.
-            
-            {cultural_prompt}
-            
-            Analyze the query for emotions with cultural sensitivity:
-            1. Primary emotion and confidence score (0-1)
-            2. List of emotion keywords (including cultural expressions)
-            3. Reasoning for emotion detection
-            4. Emotion intensity level
-            5. Cultural emotional expression patterns
-            6. Youth-specific emotional language
-            
-            Consider that emotional expression varies across cultures. In Rwandan culture:
-            - Emotions may be expressed more indirectly
-            - Family and community context affects emotional expression
-            - Youth may use different emotional vocabulary
-            - Cultural stigma may influence how emotions are communicated
-            
-            Available emotion response templates for {language}:
-            {emotion_responses}
-            """
-            
-            user_prompt = f"Detect emotions in this query with cultural awareness: '{query}'"
-            logger.info(f"📝 Emotion detection prompt prepared (system: {len(system_prompt)} chars)")
-            response_data = await self._call_llm(system_prompt, user_prompt, state, structured_output=EmotionDetectionOutput)
-
-            if not response_data:
-                raise Exception("LLM call for emotion detection failed to return data.")
-            
-            # Parse response and create emotion detection
-            logger.info(f"🔍 Parsing emotion detection response: '{response_data}'")
-            all_keywords = response_data.keywords + response_data.cultural_emotional_indicators + response_data.youth_emotional_patterns
+            # Create EmotionDetection object
             emotion_detection = EmotionDetection(
-                emotions=response_data.emotions,
-                emotion_keywords=all_keywords,
-                emotion_reason=response_data.reasoning,
-                selected_emotion=response_data.selected_emotion,
-                emotion_confidence=response_data.confidence
+                emotions=result['all_scores'],
+                emotion_keywords=result['cultural_markers'],
+                emotion_reason=reasoning,
+                selected_emotion=result['selected_emotion'],
+                emotion_confidence=result['confidence']
             )
             state["emotion_detection"] = emotion_detection
             
             processing_time = time.time() - start_time
             
             # Add metadata
-            state = add_processing_metadata(
-                state,
-                "emotion_detection",
-                emotion_detection.emotion_confidence,
-                emotion_detection.emotion_reason,
-                emotion_detection.emotion_keywords,
+            add_processing_metadata(
+                state, 
+                "emotion_detection", 
+                result['confidence'], 
+                reasoning, 
+                result['cultural_markers'], 
                 processing_time
             )
             
-            logger.info(f"✅ Emotion detection completed: emotion={emotion_detection.selected_emotion}, confidence={emotion_detection.emotion_confidence:.2f}, keywords={emotion_detection.emotion_keywords}")
+            logger.info(f"✅ Emotion detected: {result['selected_emotion']} ({result['confidence']:.2f})")
+
             
         except Exception as e:
             logger.error(f"❌ Emotion detection failed: {e}")

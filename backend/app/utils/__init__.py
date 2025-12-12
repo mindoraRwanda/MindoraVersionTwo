@@ -8,9 +8,7 @@ This package contains various utility functions and scripts for:
 - System maintenance
 """
 
-from .vector_db_populator import VectorDBPopulator, populate_vector_db
 
 __all__ = [
-    'VectorDBPopulator',
-    'populate_vector_db'
+    # Legacy vector DB utilities removed in favor of KB-card based retrieval
 ]

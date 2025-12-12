@@ -12,20 +12,16 @@ from typing import Dict, Any, Optional, TypeVar, Type, Generic, List, Callable
 from dataclasses import dataclass, field
 from contextlib import asynccontextmanager
 
-import asyncio
-import os
-import logging
-from typing import Dict, Any, Optional, TypeVar, Type, Generic, List
-from dataclasses import dataclass, field
-from contextlib import asynccontextmanager
-
 from ..settings.settings import settings
 from .llm_database_operations import DatabaseManager as LLMDatabaseOperations # Renamed to avoid conflict
-from .session_state_manager import SessionStateManager, session_manager
+from .session_state_manager import session_manager
 from .llm_service import LLMService
 # Legacy crisis_interceptor removed - using stateful pipeline instead
-from .emotion_classifier import LLMEmotionClassifier, initialize_emotion_classifier, classify_emotion_sync
-from .unified_rag_service import UnifiedRAGService, create_unified_rag_service
+from .emotion_classifier import LLMEmotionClassifier
+# UnifiedRAGService was previously used for vector-database-backed RAG.
+# It has been removed from the runtime chat path in favor of the KB-card
+# based retrieval. The import is kept commented for historical reference.
+# from .unified_rag_service import UnifiedRAGService, create_unified_rag_service
 from .stateful_pipeline import StatefulMentalHealthPipeline
 from .llm_cultural_context import RwandaCulturalManager, ResponseApproachManager, ConversationContextManager
 from .llm_safety import SafetyManager
@@ -129,18 +125,11 @@ class ServiceContainer:
             ServiceConfig("emotion_classifier", ["llm_service"], required=False)
         )
 
-        # Unified RAG service
-        self.registry.register_service(
-            "unified_rag_service",
-            lambda: self._create_unified_rag_service(),
-            ServiceConfig("unified_rag_service", [], required=False)
-        )
-
-        # LLM services (depends on RAG)
+        # LLM services (no external RAG dependency for runtime chat)
         self.registry.register_service(
             "llm_service",
             lambda: self._create_llm_service(),
-            ServiceConfig("llm_service", ["llm_config", "unified_rag_service"], required=True)
+            ServiceConfig("llm_service", ["llm_config"], required=True)
         )
 
         # Crisis alert service
@@ -152,11 +141,11 @@ class ServiceContainer:
 
 
 
-        # Stateful mental health pipeline
+        # Stateful mental health pipeline (uses KB-backed RAG node)
         self.registry.register_service(
             "stateful_pipeline",
             lambda: self._create_stateful_pipeline(),
-            ServiceConfig("stateful_pipeline", ["llm_service", "unified_rag_service"], required=True)
+            ServiceConfig("stateful_pipeline", ["llm_service"], required=True)
         )
 
         # Cultural context
@@ -191,17 +180,13 @@ class ServiceContainer:
 
     def _create_llm_service(self):
         """Create LLM service."""
-        llm_service = LLMService(use_vllm=False, provider_name=os.getenv("PROVIDER"), model_name=os.getenv("MODEL_NAME"))
-        
-        # Inject RAG service if available
-        try:
-            rag_service = self.get_service("unified_rag_service")
-            if rag_service:
-                llm_service.set_rag_service(rag_service)
-                logger.info("🔍 RAG service injected into LLM service")
-        except Exception as e:
-            logger.warning(f"Failed to inject RAG service into LLM service: {e}")
-        
+        llm_service = LLMService(
+            use_vllm=False,
+            provider_name=os.getenv("PROVIDER"),
+            model_name=os.getenv("MODEL_NAME"),
+        )
+        # Core chat now relies on KB retrieval inside the pipeline; the LLM
+        # service itself no longer needs a direct vector DB / RAG service.
         return llm_service
 
 
@@ -225,19 +210,19 @@ class ServiceContainer:
             logger.warning(f"LLM emotion classifier creation failed: {e}")
             return None
 
-    def _create_unified_rag_service(self):
-        """Create unified RAG service."""
-        try:
-            rag_service = create_unified_rag_service()
-            if rag_service:
-                logger.info("🔍 Unified RAG service created successfully")
-                return rag_service
-            else:
-                logger.warning("Failed to create unified RAG service")
-                return None
-        except Exception as e:
-            logger.warning(f"Unified RAG service creation failed: {e}")
-            return None
+    # def _create_unified_rag_service(self):
+    #     \"\"\"Create unified RAG service (legacy / tooling only).\"\"\"
+    #     try:
+    #         rag_service = create_unified_rag_service()
+    #         if rag_service:
+    #             logger.info("🔍 Unified RAG service created successfully")
+    #             return rag_service
+    #         else:
+    #             logger.warning("Failed to create unified RAG service")
+    #             return None
+    #     except Exception as e:
+    #         logger.warning(f"Unified RAG service creation failed: {e}")
+    #         return None
 
     def _create_crisis_alert_service(self):
         """Create crisis alert service."""
@@ -256,15 +241,9 @@ class ServiceContainer:
             if "llm_service" in self.registry._instances:
                 llm_service = self.registry._instances["llm_service"]
                 
-                # Get RAG service if available
-                rag_service = None
-                if "unified_rag_service" in self.registry._instances:
-                    rag_service = self.registry._instances["unified_rag_service"]
-                    logger.info("🔍 RAG service injected into stateful pipeline")
-                
                 return StatefulMentalHealthPipeline(
                     llm_provider=llm_service.llm_provider,
-                    rag_service=rag_service,
+                    rag_service=None,
                 )
             else:
                 # Fallback to default if LLM service not available yet

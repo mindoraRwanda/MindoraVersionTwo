@@ -1,11 +1,9 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
 import bleach
 import time
-import json
 from sqlalchemy.orm import Session
 from typing import List, Dict, Any, Optional
 from ..auth.utils import get_current_user
-from ..settings.settings import settings
 from ..db.database import SessionLocal
 from ..db.models import Conversation, Message, User, EmotionLog
 from ..auth.schemas import MessageCreate, MessageOut, UserOut
@@ -116,29 +114,77 @@ async def send_message(
             background=background
         )
 
-        bot_reply = pipeline_result.get("response", "I'm here to support you.")
-        response_confidence = pipeline_result.get("response_confidence", 0.0)
+        # Extract structured output first - this is the primary source of content
+        structured_output = pipeline_result.get("assistant_structured_output", {})
+        if structured_output and isinstance(structured_output, dict):
+            # Use the message from structured output as primary content
+            bot_reply = structured_output.get("message", pipeline_result.get("response", "I'm here to support you."))
+        else:
+            bot_reply = pipeline_result.get("response", "I'm here to support you.")
+        
+        # Ensure bot_reply is not empty
+        if not bot_reply or not str(bot_reply).strip():
+            print("⚠️  Warning: Pipeline returned empty response, using fallback")
+            bot_reply = "I'm here to support you. How can I help you today?"
+        
+        # Extract all metadata
+        diagnostic_slots = pipeline_result.get("diagnostic_slots", {})
         processing_metadata = pipeline_result.get("processing_metadata", [])
+        response_confidence = pipeline_result.get("response_confidence", 0.0)
+        response_reason = pipeline_result.get("response_reason", "")
+        query_validation = pipeline_result.get("query_validation")
+        crisis_assessment = pipeline_result.get("crisis_assessment")
+        emotion_detection = pipeline_result.get("emotion_detection")
+        query_evaluation = pipeline_result.get("query_evaluation")
+        cultural_context_applied = pipeline_result.get("cultural_context_applied", [])
+        processing_time = pipeline_result.get("processing_time", 0.0)
+        llm_calls_made = pipeline_result.get("llm_calls_made", 0)
+        errors = pipeline_result.get("errors", [])
 
         workflow_time = time.time() - workflow_start
-        print(f"⏱️  Stateful pipeline processing: {workflow_time:.3f}s ({len(bot_reply)} chars)")
+        print(f"⏱️  Stateful pipeline processing: {workflow_time:.3f}s ({len(str(bot_reply))} chars)")
         print(f"🤖 Response confidence: {response_confidence:.2f}")
         print(f"📊 Processing steps: {len(processing_metadata)}")
+        print(f"📋 Structured output available: {bool(structured_output)}")
+        if structured_output:
+            print(f"📝 Structured message: {structured_output.get('message', 'N/A')[:100]}...")
 
     except Exception as e:
+        import traceback
         print(f"Stateful pipeline failed: {e}")
+        traceback.print_exc()
         # Final fallback to basic response
         bot_reply = "I'm here to support you. How can I help you today?"
         workflow_time = time.time() - workflow_start
         print(f"⏱️  Fallback processing: {workflow_time:.3f}s")
+        # Initialize empty metadata for fallback
+        structured_output = {}
+        diagnostic_slots = {}
+        processing_metadata = []
+        response_confidence = 0.0
+        response_reason = f"Pipeline error: {str(e)}"
+        query_validation = None
+        crisis_assessment = None
+        emotion_detection = None
+        query_evaluation = None
+        cultural_context_applied = []
+        processing_time = workflow_time
+        llm_calls_made = 0
+        errors = [str(e)]
 
     # Get emotion data from stateful pipeline result
-    emotion_detection = pipeline_result.get("emotion_detection") if 'pipeline_result' in locals() else None
-    detected_emotion = emotion_detection.selected_emotion if emotion_detection and hasattr(emotion_detection, 'selected_emotion') else "neutral"
+    detected_emotion = "neutral"
+    if emotion_detection and hasattr(emotion_detection, 'selected_emotion'):
+        detected_emotion = emotion_detection.selected_emotion
+    elif isinstance(emotion_detection, dict):
+        detected_emotion = emotion_detection.get('selected_emotion', 'neutral')
     
     # Get query evaluation data for routing decision
-    query_evaluation = pipeline_result.get("query_evaluation") if 'pipeline_result' in locals() else None
-    routing_decision = query_evaluation.evaluation_type.value if query_evaluation and hasattr(query_evaluation, 'evaluation_type') else "GIVE_EMPATHY"
+    routing_decision = "GIVE_EMPATHY"
+    if query_evaluation and hasattr(query_evaluation, 'evaluation_type'):
+        routing_decision = query_evaluation.evaluation_type.value
+    elif isinstance(query_evaluation, dict):
+        routing_decision = query_evaluation.get('evaluation_type', {}).get('value', 'GIVE_EMPATHY')
 
     # Batch database operations - create all objects first
     db_prep_start = time.time()
@@ -188,11 +234,76 @@ async def send_message(
     print(f"🏁 Total pipeline time: {total_time:.3f}s")
     print(f"📊 Breakdown: DB({db_lookup_time + history_time + db_save_time:.3f}s) | LLM/Validation({total_time - (db_lookup_time + history_time + db_save_time):.3f}s)")
 
+    # Helper function to serialize complex objects
+    def serialize_obj(obj):
+        """Serialize objects that might have attributes or be dicts."""
+        if obj is None:
+            return None
+        if hasattr(obj, 'dict'):  # Pydantic models
+            return obj.dict()
+        elif hasattr(obj, '__dict__'):  # Regular objects
+            return {k: serialize_obj(v) for k, v in obj.__dict__.items() if not k.startswith('_')}
+        elif isinstance(obj, dict):
+            return {k: serialize_obj(v) for k, v in obj.items()}
+        elif isinstance(obj, list):
+            return [serialize_obj(item) for item in obj]
+        elif hasattr(obj, 'value'):  # Enum-like
+            return obj.value
+        else:
+            return obj
+    
+    # Use structured output: combine message + question_next for the response content
+    response_content = bot_reply
+    if structured_output and isinstance(structured_output, dict):
+        structured_message = structured_output.get("message", "").strip()
+        question_next = structured_output.get("question_next", "").strip()
+        
+        # Combine message and question_next
+        if structured_message:
+            if question_next:
+                # Combine with a space
+                response_content = f"{structured_message} {question_next}"
+            else:
+                response_content = structured_message
+    
+    # Ensure we have content
+    if not response_content or not str(response_content).strip():
+        response_content = "I'm here to support you. How can I help you today?"
+    
+    # Return response in format expected by frontend, with structured output and metadata
     return {
-        "id": bot_msg.uuid,
-        "sender": bot_msg.sender.value,
-        "content": bot_msg.content,
-        "timestamp": bot_msg.timestamp
+        "response": {
+            "content": response_content,
+            "timestamp": bot_msg.timestamp.isoformat() if hasattr(bot_msg.timestamp, 'isoformat') else str(bot_msg.timestamp)
+        },
+        "emotion": detected_emotion if detected_emotion != "neutral" else None,
+        # Structured output from core chat (AssistantTurnState)
+        "structured_output": serialize_obj(structured_output) if structured_output else None,
+        # Comprehensive metadata
+        "metadata": {
+            "response_confidence": response_confidence,
+            "response_reason": response_reason,
+            "diagnostic_slots": diagnostic_slots,
+            "processing_metadata": [
+                {
+                    "step": meta.get("step", meta.get("step_name", "")) if isinstance(meta, dict) else getattr(meta, "step_name", ""),
+                    "confidence": meta.get("confidence", meta.get("confidence_score", 0.0)) if isinstance(meta, dict) else getattr(meta, "confidence_score", 0.0),
+                    "reasoning": meta.get("reasoning", "") if isinstance(meta, dict) else getattr(meta, "reasoning", ""),
+                    "keywords": meta.get("keywords", []) if isinstance(meta, dict) else getattr(meta, "keywords", []),
+                    "processing_time": meta.get("processing_time", 0.0) if isinstance(meta, dict) else getattr(meta, "processing_time", 0.0),
+                }
+                for meta in processing_metadata
+            ],
+            "query_validation": serialize_obj(query_validation) if query_validation else None,
+            "crisis_assessment": serialize_obj(crisis_assessment) if crisis_assessment else None,
+            "emotion_detection": serialize_obj(emotion_detection) if emotion_detection else None,
+            "query_evaluation": serialize_obj(query_evaluation) if query_evaluation else None,
+            "cultural_context_applied": cultural_context_applied,
+            "routing_decision": routing_decision,
+            "processing_time": processing_time,
+            "llm_calls_made": llm_calls_made,
+            "errors": errors if errors else [],
+        }
     }
 
 

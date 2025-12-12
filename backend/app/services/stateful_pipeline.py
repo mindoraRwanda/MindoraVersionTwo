@@ -28,6 +28,7 @@ from .pipeline_nodes import (
 from .rag_enhancement_node import RAGEnhancementNode
 from ..settings import settings
 from ..prompts.cultural_context_prompts import CulturalContextPrompts
+from ..utils.logging import write_detailed_log, now_iso
 
 logger = logging.getLogger(__name__)
 
@@ -65,13 +66,9 @@ class StatefulMentalHealthPipeline:
         self.crisis_alert_node = CrisisAlertNode(self.llm_provider)
         self.generate_response_node = GenerateResponseNode(self.llm_provider)
         
-        # Initialize RAG enhancement node if RAG service is available
-        if self.rag_service:
-            self.rag_enhancement_node = RAGEnhancementNode(self.rag_service)
-            logger.info("🔍 RAG enhancement node initialized")
-        else:
-            self.rag_enhancement_node = None
-            logger.info("⚠️ RAG service not available, skipping RAG enhancement node")
+        # Initialize RAG enhancement node (now backed by KB cards instead of a live vector DB)
+        self.rag_enhancement_node = RAGEnhancementNode(self.rag_service)
+        logger.info("🔍 RAG enhancement node initialized (KB-backed)")
         
         logger.info("✅ All pipeline nodes initialized")
         
@@ -94,10 +91,9 @@ class StatefulMentalHealthPipeline:
         workflow.add_node("emotion_detection", self._emotion_detection_node)
         workflow.add_node("query_evaluation", self._query_evaluation_node)
         
-        # Add RAG enhancement node if available
-        if self.rag_enhancement_node:
-            workflow.add_node("rag_enhancement", self._rag_enhancement_node)
-            logger.info("🔍 RAG enhancement node added to workflow")
+        # Add RAG enhancement node
+        workflow.add_node("rag_enhancement", self._rag_enhancement_node)
+        logger.info("🔍 RAG enhancement node added to workflow")
         workflow.add_node("elaboration", self._elaboration_node)
         workflow.add_node("empathy", self._empathy_node)
         workflow.add_node("clarification", self._clarification_node)
@@ -152,9 +148,8 @@ class StatefulMentalHealthPipeline:
             "idle": "idle"
         }
         
-        # Add RAG enhancement route only if available
-        if self.rag_enhancement_node:
-            evaluation_routes["rag_enhancement"] = "rag_enhancement"
+        # Always include RAG/KB enhancement route
+        evaluation_routes["rag_enhancement"] = "rag_enhancement"
         
         workflow.add_conditional_edges(
             "query_evaluation",
@@ -162,20 +157,19 @@ class StatefulMentalHealthPipeline:
             evaluation_routes
         )
         
-        # Add RAG enhancement routing if available
-        if self.rag_enhancement_node:
-            workflow.add_conditional_edges(
-                "rag_enhancement",
-                self._route_after_rag_enhancement,
-                {
-                    "elaboration": "elaboration",
-                    "empathy": "empathy",
-                    "clarification": "clarification",
-                    "suggestion": "suggestion",
-                    "guidance": "guidance",
-                    "idle": "idle"
-                }
-            )
+        # Add RAG/KB enhancement routing
+        workflow.add_conditional_edges(
+            "rag_enhancement",
+            self._route_after_rag_enhancement,
+            {
+                "elaboration": "elaboration",
+                "empathy": "empathy",
+                "clarification": "clarification",
+                "suggestion": "suggestion",
+                "guidance": "guidance",
+                "idle": "idle",
+            },
+        )
         logger.info("✅ Conditional routing edges added")
         
         # All response nodes lead to generate_response
@@ -242,12 +236,11 @@ class StatefulMentalHealthPipeline:
             logger.info("🔄 No evaluation found, routing to idle")
             return "idle"
         
-        # Route to RAG enhancement first if available
-        if self.rag_enhancement_node:
-            logger.info("🔍 Routing to RAG enhancement first")
-            return "rag_enhancement"
-        
-        # Direct routing if no RAG enhancement
+        # Route to RAG/KB enhancement first
+        logger.info("🔍 Routing to RAG/KB enhancement first")
+        return "rag_enhancement"
+
+        # Direct routing fallback (kept for clarity; currently unreachable because of early return)
         strategy = evaluation.evaluation_type
         
         # Map strategy values to node names
@@ -317,6 +310,24 @@ class StatefulMentalHealthPipeline:
         logger.info(f"🚀 Starting stateful pipeline for user {user_id}")
         logger.info(f"📝 Query: '{query[:100]}{'...' if len(query) > 100 else ''}'")
         logger.info(f"📊 Conversation history: {len(conversation_history) if conversation_history else 0} messages")
+
+        # Structured input log (mirrors reference app style)
+        try:
+            write_detailed_log(
+                {
+                    "type": "stateful_pipeline_input",
+                    "timestamp": now_iso(),
+                    "user_id": user_id,
+                    "conversation_id": conversation_id,
+                    "message_id": message_id,
+                    "query_preview": query[:200],
+                    "history_len": len(conversation_history) if conversation_history else 0,
+                },
+                username=str(user_id) if user_id is not None else None,
+                conversation_id=str(conversation_id) if conversation_id is not None else None,
+            )
+        except Exception as log_err:
+            logger.debug(f"Logging (input) failed: {log_err}")
         
         # Create initial state
         initial_state = create_initial_pipeline_state(
@@ -345,19 +356,64 @@ class StatefulMentalHealthPipeline:
             logger.info(f"   📋 Steps completed: {final_state.get('processing_steps_completed', [])}")
             logger.info(f"   🤖 LLM calls made: {final_state.get('llm_calls_made', 0)}")
             logger.info(f"   ❌ Errors encountered: {len(final_state.get('errors', []))}")
-            
-            if final_state.get('errors'):
+
+            if final_state.get("errors"):
                 logger.warning(f"   ⚠️  Error details: {final_state.get('errors', [])}")
-            
+
             # Extract results
             results = self._extract_results(final_state, processing_time)
-            logger.info(f"📤 Pipeline results extracted: response length={len(results.get('response', ''))} chars, confidence={results.get('response_confidence', 0):.2f}")
+            logger.info(
+                f"📤 Pipeline results extracted: response length={len(results.get('response', ''))} chars, "
+                f"confidence={results.get('response_confidence', 0):.2f}"
+            )
+
+            # Structured output log
+            try:
+                write_detailed_log(
+                    {
+                        "type": "stateful_pipeline_output",
+                        "timestamp": now_iso(),
+                        "user_id": user_id,
+                        "conversation_id": conversation_id,
+                        "message_id": message_id,
+                        "processing_time": round(processing_time, 3),
+                        "llm_calls_made": final_state.get("llm_calls_made", 0),
+                        "steps_completed": final_state.get("processing_steps_completed", []),
+                        "response_preview": results.get("response", "")[:300],
+                        "response_confidence": results.get("response_confidence", 0.0),
+                        "errors": final_state.get("errors", []),
+                    },
+                    username=str(user_id) if user_id is not None else None,
+                    conversation_id=str(conversation_id) if conversation_id is not None else None,
+                )
+            except Exception as log_err:
+                logger.debug(f"Logging (output) failed: {log_err}")
+
             return results
-            
+
         except Exception as e:
             logger.error(f"❌ Pipeline execution failed: {e}")
             logger.error(f"   🔍 Error type: {type(e).__name__}")
             logger.error(f"   📍 Error details: {str(e)}")
+
+            # Structured error log
+            try:
+                write_detailed_log(
+                    {
+                        "type": "stateful_pipeline_error",
+                        "timestamp": now_iso(),
+                        "user_id": user_id,
+                        "conversation_id": conversation_id,
+                        "message_id": message_id,
+                        "error_type": type(e).__name__,
+                        "error_message": str(e),
+                    },
+                    username=str(user_id) if user_id is not None else None,
+                    conversation_id=str(conversation_id) if conversation_id is not None else None,
+                )
+            except Exception as log_err:
+                logger.debug(f"Logging (error) failed: {log_err}")
+
             return self._get_fallback_result(query, str(e))
     
     def _extract_results(self, state: StatefulPipelineState, processing_time: float) -> Dict[str, Any]:
@@ -372,7 +428,7 @@ class StatefulMentalHealthPipeline:
                     "confidence": meta.confidence_score,
                     "reasoning": meta.reasoning,
                     "keywords": meta.keywords,
-                    "processing_time": meta.processing_time
+                    "processing_time": meta.processing_time,
                 }
                 for meta in state.get("processing_metadata", [])
             ],
@@ -381,9 +437,11 @@ class StatefulMentalHealthPipeline:
             "emotion_detection": state.get("emotion_detection"),
             "query_evaluation": state.get("query_evaluation"),
             "cultural_context_applied": state.get("cultural_context_applied", []),
+            "diagnostic_slots": state.get("diagnostic_slots", {}),
+            "assistant_structured_output": state.get("assistant_structured_output"),
             "processing_time": processing_time,
             "llm_calls_made": state.get("llm_calls_made", 0),
-            "errors": state.get("errors", [])
+            "errors": state.get("errors", []),
         }
     
     def _get_fallback_result(self, query: str, error: str) -> Dict[str, Any]:

@@ -28,6 +28,7 @@ from ..prompts.response_approach_prompts import ResponseApproachPrompts
 from .crisis_classifier import classify_crisis
 from .safety_pipeline import log_crisis_and_notify
 from .text_emotion_classifier import TextEmotionClassifier
+from .core_chat import run_core_chat_turn, AssistantTurnState
 from pydantic import BaseModel, Field
 
 
@@ -60,7 +61,7 @@ class EmotionDetectionOutput(BaseModel):
 
 class QueryEvaluationOutput(BaseModel):
     """Pydantic model for query evaluation output."""
-    confidence: float = Field(..., description="Confidence in the chosen strategy.")
+    confidence: float = Field(..., description="Confidence in the chosen strategy (0.0 to 1.0, where 1.0 = 100% confidence).")
     reasoning: str = Field(..., description="Reasoning for the strategy selection.")
     keywords: List[str] = Field(..., description="Keywords that influenced the decision.")
     strategy: str = Field(..., description="The selected response strategy.")
@@ -623,8 +624,17 @@ class QueryEvaluationNode(BasePipelineNode):
             # Parse response and create evaluation
             logger.info(f"🔍 Parsing query evaluation response: '{response_data}'")
             all_keywords = response_data.keywords + response_data.cultural_considerations + [f"cultural_appropriateness_{response_data.cultural_appropriateness}"]
+            
+            # Normalize confidence to 0-1 range (handle both 0-1 and 0-100 formats)
+            confidence_value = response_data.confidence
+            if confidence_value > 1.0:
+                # Assume it's a percentage (0-100), convert to 0-1
+                confidence_value = confidence_value / 100.0
+                logger.warning(f"⚠️  Confidence value {response_data.confidence} > 1.0, normalizing to {confidence_value:.2f}")
+            confidence_value = max(0.0, min(1.0, confidence_value))  # Clamp to [0, 1]
+            
             query_evaluation = QueryEvaluation(
-                evaluation_confidence=response_data.confidence,
+                evaluation_confidence=confidence_value,
                 evaluation_reason=response_data.reasoning,
                 evaluation_keywords=all_keywords,
                 evaluation_type=ResponseStrategy(response_data.strategy)
@@ -1132,112 +1142,83 @@ class GenerateResponseNode(BasePipelineNode):
     """Node for final response generation and quality assurance."""
     
     async def execute(self, state: StatefulPipelineState) -> StatefulPipelineState:
-        """Generate final response with natural conversation awareness."""
+        """
+        Generate final response using the structured core chat engine.
+
+        This replaces the previous heuristic/fallback generation logic with a
+        single, well-defined structured turn that:
+        - updates diagnostic slots
+        - returns a short message + next question
+        - includes basic risk assessment metadata
+        """
         start_time = time.time()
-        
+
         try:
-            # Get cultural context for final response generation
-            cultural_context = self._get_cultural_context(state)
-            language = cultural_context["language"]
             query = state["user_query"]
-            
-            # If content already generated, validate and enhance it; otherwise generate contextual response
-            if not state.get("generated_content"):
-                query_validation = state.get("query_validation")
-                query_type = query_validation.query_type if query_validation else QueryType.UNCLEAR
-                gender_addressing = self._get_gender_aware_addressing(state)
-                
-                if query_type == QueryType.GREETING:
-                    # Use natural greeting templates
-                    templates = self.cultural_prompts.get_conversation_template('greeting_responses', language)
-                    if templates:
-                        import random
-                        template = random.choice(templates)
-                        response = template.format(gender_sibling=gender_addressing or 'friend')
-                        state["generated_content"] = response
-                        state["response_confidence"] = 0.9
-                        state["response_reason"] = f"Natural greeting response in {language}"
-                    else:
-                        # Fallback greeting
-                        greetings = {
-                            'en': f"Hey there, {gender_addressing or 'friend'}! Good to see you.",
-                            'rw': f"Muraho, {gender_addressing or 'mugenzi'}! Byiza kubabona.",
-                            'fr': f"Salut, {gender_addressing or 'ami'}! Content de te voir.",
-                            'sw': f"Hujambo, {gender_addressing or 'rafiki'}! Nimefurahi kukuona."
-                        }
-                        state["generated_content"] = greetings.get(language, greetings['en'])
-                        state["response_confidence"] = 0.8
-                        state["response_reason"] = f"Fallback greeting in {language}"
-                        
-                elif query_type == QueryType.CASUAL:
-                    # Use casual conversation templates
-                    templates = self.cultural_prompts.get_conversation_template('casual_responses', language)
-                    if templates:
-                        import random
-                        template = random.choice(templates)
-                        response = template.format(gender_sibling=gender_addressing or 'friend')
-                        state["generated_content"] = response
-                        state["response_confidence"] = 0.8
-                        state["response_reason"] = f"Natural casual response in {language}"
-                    else:
-                        # Fallback casual
-                        casual_responses = {
-                            'en': f"I hear you, {gender_addressing or 'friend'}. What's on your mind?",
-                            'rw': f"Ndabumva, {gender_addressing or 'mugenzi'}. Ni iki kiri mu mutwe wawe?",
-                            'fr': f"Je t'entends, {gender_addressing or 'ami'}. Qu'est-ce qui te préoccupe?",
-                            'sw': f"Nakusikia, {gender_addressing or 'rafiki'}. Nini kiko aklini mwako?"
-                        }
-                        state["generated_content"] = casual_responses.get(language, casual_responses['en'])
-                        state["response_confidence"] = 0.7
-                        state["response_reason"] = f"Fallback casual response in {language}"
-                        
-                else:
-                    # Generate culturally appropriate supportive response for serious topics
-                    cultural_prompt = self._apply_cultural_integration(state, "fallback_response")
-                    
-                    supportive_responses = {
-                        'en': f"I'm here to support you, {gender_addressing or 'friend'}. How can I help you today?",
-                        'rw': f"Ndi hano kugufasha, {gender_addressing or 'mugenzi'}. Ni iki nshobora gukugufasha uyu munsi?",
-                        'fr': f"Je suis là pour vous soutenir, {gender_addressing or 'ami'}. Comment puis-je vous aider aujourd'hui?",
-                        'sw': f"Niko hapa kukusaidia, {gender_addressing or 'rafiki'}. Ninaweza kukusaidia vipi leo?"
-                    }
-                    
-                    state["generated_content"] = supportive_responses.get(language, supportive_responses['en'])
-                    state["response_confidence"] = 0.6
-                    state["response_reason"] = f"Supportive response generated with cultural context for {language}"
-            else:
-                # Validate and enhance existing content with cultural appropriateness
-                existing_content = state["generated_content"]
-                is_culturally_appropriate = self._validate_cultural_appropriateness(existing_content, state)
-                
-                if not is_culturally_appropriate:
-                    # Enhance content with cultural context
-                    cultural_prompt = self._apply_cultural_integration(state, "response_enhancement")
-                    state["response_confidence"] = max(0.3, state.get("response_confidence", 0.5) - 0.1)
-                    state["response_reason"] += " (cultural appropriateness enhanced)"
-                else:
-                    state["response_confidence"] = min(1.0, state.get("response_confidence", 0.5) + 0.1)
-                    state["response_reason"] += " (culturally appropriate)"
-            
+            emotion = None
+            if state.get("emotion_detection"):
+                emotion = state["emotion_detection"].selected_emotion
+
+            strategy = None
+            if state.get("query_evaluation"):
+                strategy = state["query_evaluation"].evaluation_type.value
+
+            # Aggregate a lightweight user context snapshot
+            user_context = {
+                "user_id": state.get("user_id"),
+                "user_gender": state.get("user_gender"),
+                "detected_language": state.get("detected_language") or "en",
+            }
+
+            # Build a compact RAG summary string if knowledge is present
+            rag_text = ""
+            if state.get("retrieved_knowledge"):
+                chunks = state.get("retrieved_knowledge") or []
+                texts = [c.get("text", "") for c in chunks if c.get("text")]
+                if texts:
+                    rag_text = " ".join(texts)[:1000]
+
+            diagnostic_slots = state.get("diagnostic_slots") or {}
+
+            assistant_state, updated_slots = await run_core_chat_turn(
+                llm_provider=self.llm_provider,
+                query=query,
+                conversation_history=state.get("conversation_history") or [],
+                diagnostic_slots=diagnostic_slots,
+                user_context=user_context,
+                emotion=emotion,
+                strategy=strategy,
+                rag_text=rag_text,
+                user_id=state.get("user_id"),
+                conversation_id=state.get("conversation_id"),
+            )
+
+            # Persist results back into state
+            state["generated_content"] = assistant_state.message
+            state["response_confidence"] = 0.8  # heuristic; can be refined using riskAssessment
+            state["response_reason"] = "Structured core chat response with diagnostic slots"
+            state["diagnostic_slots"] = updated_slots
+            # Store the full structured payload for downstream consumers
+            state["assistant_structured_output"] = assistant_state.dict()
+
             processing_time = time.time() - start_time
-            
-            # Add final metadata
+
             state = add_processing_metadata(
                 state,
                 "response_generation",
-                state.get("response_confidence", 0.5),
-                state.get("response_reason", "Final response generated"),
+                state.get("response_confidence", 0.8),
+                state.get("response_reason", "Structured response generated"),
                 [],
-                processing_time
+                processing_time,
             )
-            
-            logger.info("✅ Final response generated")
-            
+
+            logger.info("✅ Final structured response generated")
+
         except Exception as e:
             logger.error(f"❌ Response generation failed: {e}")
             add_error(state, f"Response generation error: {str(e)}")
             state["generated_content"] = "I'm here to support you. How can I help you today?"
-        
+
         return state
 
 

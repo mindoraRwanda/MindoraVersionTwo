@@ -62,6 +62,12 @@ try:
 except ImportError:
     from .services.service_container import service_container, check_service_health
 
+# Initialize KB (cards) on startup, similar to reference app
+try:
+    from .services.kb import initialize_kb
+except ImportError:
+    initialize_kb = None
+
 # TEMPORARY: Drop everything before recreating
 models.Base.metadata.create_all(bind=engine)  # ❗️ This rebuilds all tables
 
@@ -85,6 +91,11 @@ async def startup_event():
         if not success:
             print("❌ Failed to initialize services")
             raise RuntimeError("Service initialization failed")
+
+        # Initialize KB cards-based retrieval
+        if initialize_kb is not None:
+            print("📚 Initializing KB cards...")
+            initialize_kb()
 
         # Check service health
         print("🏥 Checking service health...")

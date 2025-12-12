@@ -138,6 +138,7 @@ export default function ChatDashboard() {
 
     try {
       const res = await sendMessage(selectedChat.id, originalInput);
+      console.log('res', res);
       if (!res?.response?.content) throw new Error('Invalid bot response');
 
       const botMsg = {

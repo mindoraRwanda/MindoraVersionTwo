@@ -45,33 +45,3 @@ class DatabaseManager:
         except Exception as e:
             print(f"[DB Error] {e}")
             return []
-
-    @staticmethod
-    def get_conversation_context(user_id: str, limit: int = 10) -> List[Dict[str, Any]]:
-        """Get conversation context for a user"""
-        try:
-            db: Session = next(get_db())
-
-            # Get most recently active conversation
-            conversation = (
-                db.query(Conversation)
-                .filter_by(user_id=user_id)
-                .order_by(Conversation.last_activity_at.desc())
-                .first()
-            )
-
-            if not conversation:
-                return []
-
-            messages = (
-                db.query(Message)
-                .filter_by(conversation_id=conversation.id)
-                .order_by(Message.timestamp.desc())
-                .limit(limit)
-                .all()
-            )
-
-            return list(reversed(messages))  # Return oldest → newest
-        except Exception as e:
-            print(f"Database error: {e}")
-            return []

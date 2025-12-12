@@ -7,7 +7,7 @@ import logging
 import time
 from typing import Dict, Any, List, Optional
 from .pipeline_state import StatefulPipelineState, add_processing_metadata, add_error
-from .unified_rag_service import UnifiedRAGService
+from .kb import retrieve_kb_hybrid, initialize_kb
 
 logger = logging.getLogger(__name__)
 
@@ -23,8 +23,16 @@ class RAGEnhancementNode:
     4. Tracks retrieval metadata for explainability
     """
     
-    def __init__(self, rag_service: UnifiedRAGService):
-        """Initialize the RAG enhancement node."""
+    def __init__(self, rag_service=None):
+        """Initialize the RAG enhancement node.
+
+        The previous implementation depended on a dedicated vector-database
+        service (UnifiedRAGService). We now use the KB cards + TF-IDF (and
+        optional local Qdrant) via the kb module, keeping the public behavior
+        similar but dropping the heavy runtime vector DB dependency.
+        """
+        # The rag_service parameter is kept for backward-compatibility but
+        # is no longer required; retrieval is done via retrieve_kb_hybrid.
         self.rag_service = rag_service
         self.logger = logger
         
@@ -58,7 +66,7 @@ class RAGEnhancementNode:
                 state["rag_enhancement_applied"] = False
                 return state
             
-            # Retrieve relevant knowledge
+            # Retrieve relevant knowledge from KB (cards)
             retrieved_results = await self._retrieve_knowledge(query, state)
             
             # Filter and rank results
@@ -115,18 +123,42 @@ class RAGEnhancementNode:
         return False
     
     async def _retrieve_knowledge(self, query: str, state: StatefulPipelineState) -> List[Dict[str, Any]]:
-        """Retrieve relevant knowledge from the RAG system."""
+        """Retrieve relevant knowledge from the KB system."""
         try:
+            # Ensure KB is initialized
+            initialize_kb()
+
             # Enhance query with context from conversation history
             enhanced_query = self._enhance_query_with_context(query, state)
-            
-            # Search for relevant knowledge
-            results = self.rag_service.search(enhanced_query, top_k=self.max_retrieved_chunks)
-            
-            self.logger.info(f"🔍 Retrieved {len(results)} knowledge chunks for query")
-            
+
+            kb_hits, method, elapsed = retrieve_kb_hybrid(
+                enhanced_query,
+                k=self.max_retrieved_chunks,
+                username=str(state.get("user_id")) if state.get("user_id") else None,
+                conversation_id=str(state.get("conversation_id")) if state.get("conversation_id") else None,
+            )
+
+            self.logger.info(
+                f"🔍 Retrieved {len(kb_hits)} KB cards using {method} in {elapsed:.3f}s"
+            )
+
+            # Adapt KB cards into the generic 'results' format used downstream
+            results: List[Dict[str, Any]] = []
+            for card in kb_hits:
+                results.append(
+                    {
+                        "id": card.get("id"),
+                        "score": 1.0,  # TF-IDF / semantic scores not exposed; treat as relevant
+                        "text": card.get("bot_say", ""),
+                        "source": card.get("title", card.get("id", "KB")),
+                        "chunk_id": 0,
+                        "file_size": 0,
+                        "processed_at": 0,
+                    }
+                )
+
             return results
-            
+
         except Exception as e:
             self.logger.error(f"❌ Knowledge retrieval failed: {e}")
             return []
@@ -257,70 +289,3 @@ class RAGEnhancementNode:
                 for result in retrieved_knowledge[:3]  # Top 3 sources
             ]
         }
-
-
-class RAGContextIntegrator:
-    """
-    Utility class for integrating RAG knowledge into LLM prompts.
-    """
-    
-    @staticmethod
-    def build_rag_enhanced_prompt(
-        base_prompt: str,
-        knowledge_context: str,
-        language: str = "en"
-    ) -> str:
-        """
-        Build a prompt enhanced with RAG knowledge context.
-        
-        Args:
-            base_prompt: Base system prompt
-            knowledge_context: Retrieved knowledge context
-            language: Language for context formatting
-            
-        Returns:
-            Enhanced prompt with knowledge context
-        """
-        if not knowledge_context:
-            return base_prompt
-        
-        # Language-specific integration instructions
-        integration_instructions = {
-            "rw": "\n\nUbwenge bw'ubuzima bwo mu mutwe buhari:\n{knowledge_context}\n\nKoresha ubwenge bwo mu mutwe buhari kugira ngo usubize neza. Ntuzige ibyo utazi, ariko koresha ubwenge buhari kugira ngo usubize neza.",
-            "fr": "\n\nConnaissances en santé mentale disponibles:\n{knowledge_context}\n\nUtilisez ces connaissances pour fournir des réponses informées et précises. Ne pas inventer d'informations, mais utilisez les connaissances disponibles pour enrichir vos réponses.",
-            "en": "\n\nAvailable Mental Health Knowledge:\n{knowledge_context}\n\nUse this knowledge to provide informed and accurate responses. Do not make up information, but use the available knowledge to enrich your responses."
-        }
-        
-        instruction = integration_instructions.get(language, integration_instructions["en"])
-        
-        return base_prompt + instruction.format(knowledge_context=knowledge_context)
-    
-    @staticmethod
-    def extract_key_insights(knowledge_context: str, max_insights: int = 3) -> List[str]:
-        """
-        Extract key insights from knowledge context.
-        
-        Args:
-            knowledge_context: Retrieved knowledge context
-            max_insights: Maximum number of insights to extract
-            
-        Returns:
-            List of key insights
-        """
-        if not knowledge_context:
-            return []
-        
-        # Simple extraction - split by source and take first sentence of each
-        insights = []
-        lines = knowledge_context.split('\n')
-        
-        for line in lines:
-            if line.strip() and not line.startswith('From') and not line.startswith('Mental Health Knowledge'):
-                # Extract first sentence
-                first_sentence = line.split('.')[0] + '.' if '.' in line else line
-                if len(first_sentence) > 20:  # Only meaningful insights
-                    insights.append(first_sentence.strip())
-                    if len(insights) >= max_insights:
-                        break
-        
-        return insights

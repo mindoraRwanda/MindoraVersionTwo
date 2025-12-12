@@ -13,7 +13,6 @@ from .llm_cultural_context import (
 )
 from .llm_providers import LLMProviderFactory, create_llm_provider
 from .llm_database_operations import DatabaseManager
-from .unified_rag_service import UnifiedRAGService
 
 
 class LLMService:
@@ -164,25 +163,10 @@ class LLMService:
         analysis_time = time.time() - analysis_start
         print(f"    📊 LLM: Analysis pipeline: {analysis_time:.3f}s")
 
-        # RAG retrieval (skip for simple greetings)
+        # RAG retrieval is now handled via the KB-backed RAG node inside the
+        # stateful pipeline. For direct LLMService usage we skip external
+        # vector DB lookups to keep things lightweight.
         retrieved_text = ""
-        if not ConversationContextManager.is_simple_greeting(user_message):
-            rag_start = time.time()
-            try:
-                if self.rag_service:
-                    rag_top_k = settings.performance.rag_top_k if settings.performance else 3
-                    retrieved_results = self.rag_service.search(query=user_message, top_k=rag_top_k)
-                    retrieved_text = "\n\n".join(
-                        result.get("text", "") for result in retrieved_results if result.get("text")
-                    )
-                    rag_time = time.time() - rag_start
-                    print(f"    🔍 LLM: RAG search: {rag_time:.3f}s ({len(retrieved_results)} chunks)")
-                else:
-                    retrieved_text = ""
-                    print("    ⚠️ LLM: RAG service not available")
-            except Exception as e:
-                print(f"    ❌ LLM: RAG Error: {e}")
-                retrieved_text = ""
 
         # Get conversation history if not provided
         if not conversation_history and user_id:
@@ -241,18 +225,6 @@ class LLMService:
 
         return response
 
-    def get_rwanda_crisis_resources(self) -> Dict[str, Any]:
-        """Get Rwanda-specific crisis resources."""
-        return RwandaCulturalManager.get_crisis_resources()
-
-    def get_rwanda_cultural_context(self) -> Dict[str, str]:
-        """Get Rwanda-specific cultural context."""
-        return RwandaCulturalManager.get_cultural_context()
-
-    def get_grounding_exercise(self) -> str:
-        """Get culturally resonant grounding exercise."""
-        return RwandaCulturalManager.get_grounding_exercise()
-
     def initialize(self) -> bool:
         """
         Initialize the LLM service components.
@@ -293,18 +265,8 @@ class LLMService:
                 print(f"⚠️  {self._initialization_error}")
                 print(f"   Model '{self.model_name}' not found or server not running")
 
-            # Test RAG service connection
-            if self.rag_service:
-                try:
-                    # Simple test to ensure RAG service can connect
-                    test_query = "test"
-                    self.rag_service.search(test_query, top_k=1)
-                    print("✅ RAG service initialized successfully")
-                except Exception as e:
-                    self._initialization_error = f"Failed to initialize RAG service: {e}"
-                    print(f"⚠️  {self._initialization_error}")
-                    # Continue without RAG if it fails
-
+            # Note: RAG service is no longer required for core chat; retrieval
+            # is handled by the KB-backed RAG node inside the pipeline.
             self._is_initialized = True
             print("✅ LLM Service initialization completed")
             return True
@@ -320,10 +282,10 @@ class LLMService:
         """Check if the service is properly initialized."""
         return getattr(self, '_is_initialized', False)
     
-    def set_rag_service(self, rag_service: UnifiedRAGService):
-        """Inject RAG service into LLM service."""
-        self.rag_service = rag_service
-        print("🔍 RAG service injected into LLM service")
+    def set_rag_service(self, rag_service: Any):
+        """Inject RAG service into LLM service (legacy path, no-op for core chat)."""
+        # No-op: RAG is now handled by RAGEnhancementNode using KB cards
+        pass
 
     @property
     def initialization_error(self) -> Optional[str]:

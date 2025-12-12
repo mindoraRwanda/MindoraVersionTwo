@@ -109,6 +109,8 @@ class StatefulPipelineState(TypedDict):
     generated_content: str
     response_confidence: float
     response_reason: str
+    diagnostic_slots: Dict[str, Any]
+    assistant_structured_output: Optional[Dict[str, Any]]
     
     # Metadata and explainability
     processing_metadata: List[ProcessingMetadata]
@@ -151,6 +153,8 @@ def create_initial_pipeline_state(
     background: Optional[BackgroundTasks] = None
 ) -> StatefulPipelineState:
     """Create initial state for the pipeline."""
+    from .diagnostic_slots import get_default_slots
+
     return {
         "user_query": query,
         "user_id": user_id,
@@ -166,6 +170,8 @@ def create_initial_pipeline_state(
         "generated_content": "",
         "response_confidence": 0.0,
         "response_reason": "",
+        "diagnostic_slots": get_default_slots(),
+        "assistant_structured_output": None,
         "processing_metadata": [],
         "processing_steps_completed": [],
         "llm_calls_made": 0,

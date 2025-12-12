@@ -3,7 +3,6 @@ from fastapi import APIRouter, UploadFile, File, Form, Depends, HTTPException, B
 import os, uuid, tempfile, subprocess
 from faster_whisper import WhisperModel
 import time
-import json
 import bleach
 from typing import List, Dict, Any, Optional
 from sqlalchemy.orm import Session
@@ -14,10 +13,7 @@ from io import BytesIO
 from ..auth.utils import get_current_user
 from ..db.database import SessionLocal
 from ..db.models import User, Conversation, Message, EmotionLog
-from ..auth.schemas import MessageOut, UserOut
-from ..services.stateful_pipeline import StatefulMentalHealthPipeline
-from ..routers.messages_router import send_message
-
+from ..auth.schemas import UserOut
 from ..services.session_state_manager import session_manager
 from ..dependencies import get_stateful_pipeline
 import logging  
@@ -52,7 +48,6 @@ async def voice_message(
     background: BackgroundTasks,
     file: UploadFile = File(...),
     conversation_id: str = Form(...),
-    meta: Optional[str] = Form(None),
     db: Session = Depends(get_db),
     user: UserOut = Depends(get_current_user),
 ):

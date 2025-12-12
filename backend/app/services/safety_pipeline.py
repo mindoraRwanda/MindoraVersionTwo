@@ -70,8 +70,32 @@ def log_crisis_and_notify(
     classifier_model: str,
     classifier_version: str
 ):
+    import uuid
+    
     logger = logging.getLogger(__name__)
     logger.info(f"🚨 log_crisis_and_notify: Starting crisis logging for user {user_id}")
+
+    # Convert string UUIDs to UUID objects if needed
+    if isinstance(user_id, str):
+        try:
+            user_id = uuid.UUID(user_id)
+        except ValueError:
+            logger.error(f"Invalid user_id format: {user_id}")
+            raise ValueError(f"Invalid user_id format: {user_id}")
+    
+    if isinstance(conversation_id, str):
+        try:
+            conversation_id = uuid.UUID(conversation_id) if conversation_id else None
+        except ValueError:
+            logger.error(f"Invalid conversation_id format: {conversation_id}")
+            conversation_id = None
+    
+    if isinstance(message_id, str):
+        try:
+            message_id = uuid.UUID(message_id) if message_id else None
+        except ValueError:
+            logger.error(f"Invalid message_id format: {message_id}")
+            message_id = None
 
     label = str(crisis_result.get("label", "other"))
     severity = str(crisis_result.get("severity", "low"))
@@ -99,21 +123,19 @@ def log_crisis_and_notify(
     if therapist:
         crisis.notified_therapist_id = therapist.id
 
-    db.add(crisis)
-    db.flush()  # crisis.id now available
-    logger.info(f"🚨 log_crisis_and_notify: Crisis log created with ID: {crisis.id}")
+    try:
+        db.add(crisis)
+        db.flush()  # crisis.id now available
+        logger.info(f"🚨 log_crisis_and_notify: Crisis log created with ID: {crisis.id}")
+    except Exception as e:
+        logger.error(f"🚨 log_crisis_and_notify: Error creating crisis log: {e}")
+        db.rollback()
+        raise
 
     if therapist and therapist.active and therapist.email:
         logger.info(f"🚨 log_crisis_and_notify: Therapist is active with email: {therapist.email}")
         
-        # Ensure user_id is a UUID object if it's a string
-        import uuid
-        if isinstance(user_id, str):
-            try:
-                user_id = uuid.UUID(user_id)
-            except ValueError:
-                pass
-
+        # user_id is already converted to UUID above
         patient = db.get(User, user_id)
         case_url = f"{os.getenv('ADMIN_DASHBOARD_URL', 'https://your-admin.app')}/cases/{crisis.id}"
         logger.info(f"🚨 log_crisis_and_notify: Case URL: {case_url}")

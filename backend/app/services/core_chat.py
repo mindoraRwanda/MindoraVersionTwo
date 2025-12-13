@@ -11,11 +11,15 @@ Responsibilities:
 
 from typing import Dict, Any, List, Optional, Tuple
 from pydantic import BaseModel, Field, ValidationError
+import asyncio
+import logging
 
 from langchain_core.messages import HumanMessage, SystemMessage
 
 from ..utils.logging import write_detailed_log, now_iso
 from .diagnostic_slots import get_default_slots, apply_slot_updates
+
+logger = logging.getLogger(__name__)
 
 
 class AssistantTurnState(BaseModel):
@@ -144,14 +148,116 @@ async def run_core_chat_turn(
         conversation_id=str(conversation_id) if conversation_id is not None else None,
     )
 
-    # Request structured output directly from the provider
-    try:
-        result: AssistantTurnState = await llm_provider.agenerate(
-            messages, structured_output=AssistantTurnState
-        )
-    except ValidationError as ve:
-        # Surface as a RuntimeError so the pipeline can fall back gracefully
-        raise RuntimeError(f"Structured output validation failed: {ve}") from ve
+    # Request structured output with retries (like reference app)
+    # Retry up to 3 times on validation errors
+    max_retries = 3
+    retry_delay = 0.5
+    last_error = None
+    result = None
+    
+    for attempt in range(max_retries):
+        try:
+            logger.info(f"🔄 Core chat attempt {attempt + 1}/{max_retries}")
+            result: AssistantTurnState = await llm_provider.agenerate(
+                messages, structured_output=AssistantTurnState
+            )
+            # Success - validate we have content
+            if not result.message or not result.message.strip():
+                logger.warning(f"⚠️  Attempt {attempt + 1}: LLM returned empty message, retrying...")
+                if attempt < max_retries - 1:
+                    await asyncio.sleep(retry_delay)
+                    retry_delay *= 1.5
+                    continue
+                else:
+                    raise ValueError("LLM returned empty message after all retries")
+            
+            if not result.question_next or not result.question_next.strip():
+                logger.warning(f"⚠️  Attempt {attempt + 1}: LLM returned empty question_next, retrying...")
+                if attempt < max_retries - 1:
+                    await asyncio.sleep(retry_delay)
+                    retry_delay *= 1.5
+                    continue
+                else:
+                    raise ValueError("LLM returned empty question_next after all retries")
+            
+            # Success - log if we retried
+            if attempt > 0:
+                write_detailed_log(
+                    {
+                        "type": "core_chat_retry_success",
+                        "timestamp": now_iso(),
+                        "user_id": user_id,
+                        "conversation_id": conversation_id,
+                        "attempt": attempt + 1,
+                    },
+                    username=str(user_id) if user_id is not None else None,
+                    conversation_id=str(conversation_id) if conversation_id is not None else None,
+                )
+            break
+            
+        except ValidationError as ve:
+            last_error = ve
+            logger.warning(f"⚠️  Attempt {attempt + 1}/{max_retries}: ValidationError - {ve}")
+            write_detailed_log(
+                {
+                    "type": "core_chat_retry_attempt",
+                    "timestamp": now_iso(),
+                    "user_id": user_id,
+                    "conversation_id": conversation_id,
+                    "attempt": attempt + 1,
+                    "max_retries": max_retries,
+                    "error": str(ve),
+                    "error_type": "ValidationError",
+                },
+                username=str(user_id) if user_id is not None else None,
+                conversation_id=str(conversation_id) if conversation_id is not None else None,
+            )
+            
+            if attempt < max_retries - 1:
+                await asyncio.sleep(retry_delay)
+                retry_delay *= 1.5
+            else:
+                logger.error(f"❌ All {max_retries} retries exhausted for structured output validation")
+                write_detailed_log(
+                    {
+                        "type": "core_chat_retry_exhausted",
+                        "timestamp": now_iso(),
+                        "user_id": user_id,
+                        "conversation_id": conversation_id,
+                        "total_attempts": max_retries,
+                        "error": str(ve),
+                    },
+                    username=str(user_id) if user_id is not None else None,
+                    conversation_id=str(conversation_id) if conversation_id is not None else None,
+                )
+                raise RuntimeError(f"Structured output validation failed after {max_retries} attempts: {ve}") from ve
+                
+        except Exception as e:
+            last_error = e
+            logger.error(f"❌ Attempt {attempt + 1}: Unexpected error - {type(e).__name__}: {e}")
+            # Only retry on recoverable errors
+            if attempt < max_retries - 1 and isinstance(e, (ConnectionError, TimeoutError, asyncio.TimeoutError)):
+                write_detailed_log(
+                    {
+                        "type": "core_chat_retry_attempt",
+                        "timestamp": now_iso(),
+                        "user_id": user_id,
+                        "conversation_id": conversation_id,
+                        "attempt": attempt + 1,
+                        "error": str(e),
+                        "error_type": type(e).__name__,
+                    },
+                    username=str(user_id) if user_id is not None else None,
+                    conversation_id=str(conversation_id) if conversation_id is not None else None,
+                )
+                await asyncio.sleep(retry_delay)
+                retry_delay *= 1.5
+            else:
+                # Don't retry on other errors
+                raise
+    
+    if result is None:
+        raise RuntimeError(f"Failed to get valid structured output after {max_retries} attempts: {last_error}") from last_error
 
     # Post-process to enforce contract: remove questions from message field
     import re
@@ -205,6 +311,15 @@ async def run_core_chat_turn(
                 # Use the extracted question(s)
                 result.question_next = all_questions
 
+    # Final validation: ensure we have valid content after post-processing
+    if not result.message or not result.message.strip():
+        logger.warning("⚠️  Message is empty after post-processing, using fallback")
+        result.message = "I understand."
+    
+    if not result.question_next or not result.question_next.strip():
+        logger.warning("⚠️  question_next is empty after post-processing, using fallback")
+        result.question_next = "How are you feeling today?"
+    
     # Update slots
     updated_slots = apply_slot_updates(slots, result.slotUpdates or {})
 

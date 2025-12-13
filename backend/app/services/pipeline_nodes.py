@@ -1215,9 +1215,21 @@ class GenerateResponseNode(BasePipelineNode):
             logger.info("✅ Final structured response generated")
 
         except Exception as e:
+            import traceback
+            error_trace = traceback.format_exc()
             logger.error(f"❌ Response generation failed: {e}")
+            logger.error(f"❌ Traceback: {error_trace}")
             add_error(state, f"Response generation error: {str(e)}")
-            state["generated_content"] = "I'm here to support you. How can I help you today?"
+            
+            # Try to provide a more helpful fallback based on error type
+            if "ValidationError" in str(type(e)) or "validation" in str(e).lower():
+                logger.warning("⚠️  Validation error - LLM returned invalid structured output")
+                state["generated_content"] = "I understand. How are you feeling today?"
+            elif "empty" in str(e).lower() or "message" in str(e).lower():
+                logger.warning("⚠️  Empty response error - LLM returned empty content")
+                state["generated_content"] = "I understand. How are you feeling today?"
+            else:
+                state["generated_content"] = "I'm here to support you. How can I help you today?"
 
         return state
 

@@ -27,8 +27,10 @@ export default function Login() {
     const token = res.data.access_token;
     const username = res.data.username; // assuming returned now
 
-    localStorage.setItem('token', token);
-    localStorage.setItem('username', username);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('token', token);
+      localStorage.setItem('username', username);
+    }
 
     // 👉 Now fetch latest conversation and go to it
     const convoRes = await axios.get('http://localhost:8000/auth/conversations', {

@@ -5,10 +5,11 @@ import { useNavigate } from 'react-router-dom';
 export default function ChatList() {
   const [conversations, setConversations] = useState([]);
   const [error, setError] = useState(null);
-  const token = localStorage.getItem('token');
   const navigate = useNavigate();
 
   useEffect(() => {
+    const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+    
     const fetchChats = async () => {
       try {
         const res = await axios.get('http://localhost:8000/auth/conversations', {
@@ -26,9 +27,11 @@ export default function ChatList() {
     };
 
     fetchChats();
-  }, [token]);
+  }, []);
 
   const handleNewChat = async () => {
+    const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+    
     try {
       const res = await axios.post(
         'http://localhost:8000/auth/conversations',
@@ -50,6 +53,8 @@ export default function ChatList() {
 
   const handleDeleteChat = async (chatId, e) => {
     e.stopPropagation(); // Prevent navigation when clicking delete
+    
+    const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
     
     if (!window.confirm('Are you sure you want to delete this conversation?')) {
       return;

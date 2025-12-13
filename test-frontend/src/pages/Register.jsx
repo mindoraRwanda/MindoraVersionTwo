@@ -14,9 +14,11 @@ export default function Register() {
   const handleRegister = async () => {
   try {
     const res = await register(username, email, password, gender);
-    localStorage.setItem('token', res.data.access_token);
-    localStorage.setItem('user_id', res.data.user_id);
-    localStorage.setItem('gender', res.data.gender || '');
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('token', res.data.access_token);
+      localStorage.setItem('user_id', res.data.user_id);
+      localStorage.setItem('gender', res.data.gender || '');
+    }
 
     // Create first conversation
     const conv = await startNewChat();

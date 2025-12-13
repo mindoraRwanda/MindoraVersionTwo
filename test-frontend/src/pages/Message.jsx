@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect, useMemo } from "react";
 import ReactMarkdown from "react-markdown";
 
 const Avatar = ({ isUser }) => {
-  const icon = isUser ? "👤" : "🤖";
+  const icon = isUser ? "" : "";
   return <div className="avatar">{icon}</div>;
 };
 

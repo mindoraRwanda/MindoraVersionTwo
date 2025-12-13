@@ -112,9 +112,11 @@ export default function ChatDashboard() {
   }, [deleteConversation, fetchConversations, selectedChat]);
 
   const handleLogout = useCallback(() => {
-    localStorage.removeItem('token');
-    localStorage.removeItem('username');
-    window.location.href = '/';
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('token');
+      localStorage.removeItem('username');
+      window.location.href = '/';
+    }
   }, []);
 
   const toggleSidebar = useCallback(() => setSidebarVisible(prev => !prev), []);

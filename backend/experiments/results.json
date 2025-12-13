@@ -1,0 +1,2727 @@
+[
+  {
+    "text": "I finally got the promotion I've been working so hard for!",
+    "true_label": "joy",
+    "predicted_label": "joy",
+    "confidence": 1.0,
+    "emotions_distribution": {
+      "joy": 1.0,
+      "sadness": 0.0,
+      "anger": 0.0,
+      "fear": 0.0,
+      "disgust": 0.0,
+      "surprise": 0.0,
+      "trust": 0.0,
+      "anticipation": 0.0,
+      "anxiety": 0.0,
+      "contempt": 0.0
+    },
+    "full_response": {
+      "emotion": "joy",
+      "confidence": 1.0,
+      "reasoning": "The user's text expresses happiness and satisfaction about receiving a well-deserved promotion, which is typically associated with positive emotions like joy.",
+      "keywords": [
+        "promotion",
+        "family pride",
+        "accomplishment"
+      ],
+      "intensity": "high",
+      "emotions": {
+        "joy": 1.0,
+        "sadness": 0.0,
+        "anger": 0.0,
+        "fear": 0.0,
+        "disgust": 0.0,
+        "surprise": 0.0,
+        "trust": 0.0,
+        "anticipation": 0.0,
+        "anxiety": 0.0,
+        "contempt": 0.0
+      },
+      "cultural_context": {
+        "language": "en",
+        "cultural_indicators": [
+          "family pride",
+          "accomplishment"
+        ],
+        "youth_patterns": [],
+        "appropriateness": "medium"
+      }
+    }
+  },
+  {
+    "text": "The sunrise this morning was absolutely breathtaking.",
+    "true_label": "joy",
+    "predicted_label": "joy",
+    "confidence": 0.98,
+    "emotions_distribution": {
+      "joy": 1.0,
+      "sadness": 0.0,
+      "anger": 0.0,
+      "fear": 0.0,
+      "disgust": 0.0,
+      "surprise": 0.0,
+      "trust": 0.0,
+      "anticipation": 0.0,
+      "anxiety": 0.0,
+      "contempt": 0.0
+    },
+    "full_response": {
+      "emotion": "joy",
+      "confidence": 0.98,
+      "reasoning": "The user described the sunrise as 'absolutely breathtaking', which evokes a strong positive emotion of joy and awe. This is an intense, uplifting experience that likely triggers feelings of happiness, wonder, and appreciation.",
+      "keywords": [
+        "breathtaking",
+        "awe",
+        "wonder",
+        "emphasizes positive experiences and feelings of appreciation for nature"
+      ],
+      "intensity": "high",
+      "emotions": {
+        "joy": 1.0,
+        "sadness": 0.0,
+        "anger": 0.0,
+        "fear": 0.0,
+        "disgust": 0.0,
+        "surprise": 0.0,
+        "trust": 0.0,
+        "anticipation": 0.0,
+        "anxiety": 0.0,
+        "contempt": 0.0
+      },
+      "cultural_context": {
+        "language": "en",
+        "cultural_indicators": [
+          "awe",
+          "wonder"
+        ],
+        "youth_patterns": [
+          "emphasizes positive experiences and feelings of appreciation for nature"
+        ],
+        "appropriateness": "high"
+      }
+    }
+  },
+  {
+    "text": "I'm so happy to see my family again after so long.",
+    "true_label": "joy",
+    "predicted_label": "joy",
+    "confidence": 1.0,
+    "emotions_distribution": {
+      "joy": 1.0,
+      "sadness": 0.0,
+      "anger": 0.0,
+      "fear": 0.0,
+      "disgust": 0.0,
+      "surprise": 0.0,
+      "trust": 0.0,
+      "anticipation": 0.0,
+      "anxiety": 0.0,
+      "contempt": 0.0
+    },
+    "full_response": {
+      "emotion": "joy",
+      "confidence": 1.0,
+      "reasoning": "The text expresses a clear positive emotion of joy upon seeing family after an absence, with no other emotions present.",
+      "keywords": [
+        "happy",
+        "family",
+        "Ubuntu philosophy emphasizes community and interconnectedness",
+        "Emotions may be expressed more indirectly in Rwandan culture"
+      ],
+      "intensity": "high",
+      "emotions": {
+        "joy": 1.0,
+        "sadness": 0.0,
+        "anger": 0.0,
+        "fear": 0.0,
+        "disgust": 0.0,
+        "surprise": 0.0,
+        "trust": 0.0,
+        "anticipation": 0.0,
+        "anxiety": 0.0,
+        "contempt": 0.0
+      },
+      "cultural_context": {
+        "language": "en",
+        "cultural_indicators": [
+          "Ubuntu philosophy emphasizes community and interconnectedness",
+          "Emotions may be expressed more indirectly in Rwandan culture"
+        ],
+        "youth_patterns": [],
+        "appropriateness": "high"
+      }
+    }
+  },
+  {
+    "text": "This birthday surprise is the best thing ever!",
+    "true_label": "joy",
+    "predicted_label": "joy",
+    "confidence": 1.0,
+    "emotions_distribution": {
+      "joy": 1.0,
+      "sadness": 0.0,
+      "anger": 0.0,
+      "fear": 0.0,
+      "disgust": 0.0,
+      "surprise": 1.0,
+      "trust": 0.2,
+      "anticipation": 0.3,
+      "anxiety": 0.0,
+      "contempt": 0.0
+    },
+    "full_response": {
+      "emotion": "joy",
+      "confidence": 1.0,
+      "reasoning": "The text expresses intense happiness and joy, with no sadness or anger detected. The word 'best' highlights the strong positive emotion of joy.",
+      "keywords": [
+        "best thing ever",
+        "expressing gratitude",
+        "celebrating special moments"
+      ],
+      "intensity": "high",
+      "emotions": {
+        "joy": 1.0,
+        "sadness": 0.0,
+        "anger": 0.0,
+        "fear": 0.0,
+        "disgust": 0.0,
+        "surprise": 1.0,
+        "trust": 0.2,
+        "anticipation": 0.3,
+        "anxiety": 0.0,
+        "contempt": 0.0
+      },
+      "cultural_context": {
+        "language": "en",
+        "cultural_indicators": [
+          "expressing gratitude",
+          "celebrating special moments"
+        ],
+        "youth_patterns": [],
+        "appropriateness": "high"
+      }
+    }
+  },
+  {
+    "text": "I feel great about finishing this project on time.",
+    "true_label": "joy",
+    "predicted_label": "joy",
+    "confidence": 0.9,
+    "emotions_distribution": {
+      "joy": 1.0,
+      "sadness": 0.0,
+      "anger": 0.0,
+      "fear": 0.0,
+      "disgust": 0.0,
+      "surprise": 0.0,
+      "trust": 0.0,
+      "anticipation": 1.0,
+      "anxiety": 0.0,
+      "contempt": 0.0
+    },
+    "full_response": {
+      "emotion": "joy",
+      "confidence": 0.9,
+      "reasoning": "The user expressed a positive emotion by saying they feel great about finishing the project on time, indicating joy and anticipation.",
+      "keywords": [
+        "feel",
+        "great",
+        {
+          "pattern": "expressing satisfaction with a completed task",
+          "description": "Youth often use phrases like 'feel great' to convey positive outcomes from completing tasks or challenges."
+        }
+      ],
+      "intensity": "high",
+      "emotions": {
+        "joy": 1.0,
+        "sadness": 0.0,
+        "anger": 0.0,
+        "fear": 0.0,
+        "disgust": 0.0,
+        "surprise": 0.0,
+        "trust": 0.0,
+        "anticipation": 1.0,
+        "anxiety": 0.0,
+        "contempt": 0.0
+      },
+      "cultural_context": {
+        "language": "en",
+        "cultural_indicators": [],
+        "youth_patterns": [
+          {
+            "pattern": "expressing satisfaction with a completed task",
+            "description": "Youth often use phrases like 'feel great' to convey positive outcomes from completing tasks or challenges."
+          }
+        ],
+        "appropriateness": "high"
+      }
+    }
+  },
+  {
+    "text": "I feel so empty and alone since she left.",
+    "true_label": "sadness",
+    "predicted_label": "sadness",
+    "confidence": 0.95,
+    "emotions_distribution": {
+      "joy": 0.0,
+      "sadness": 0.95,
+      "anger": 0.0,
+      "fear": 0.0,
+      "disgust": 0.0,
+      "surprise": 0.0,
+      "trust": 0.0,
+      "anticipation": 0.0,
+      "anxiety": 0.05,
+      "contempt": 0.0
+    },
+    "full_response": {
+      "emotion": "sadness",
+      "confidence": 0.95,
+      "reasoning": "The user's statement 'I feel so empty and alone since she left.' strongly indicates sadness, as the primary emotional experience is a profound sense of emptiness that has been exacerbated by being left behind by someone they cared about. The secondary emotion of anxiety (0.05) may be present due to potential concerns about loneliness or future interactions with this person.",
+      "keywords": [
+        "empty",
+        "alone",
+        {
+          "expression": "emptiness",
+          "description": "A common Rwandan expression for a deep sense of loneliness or void within oneself, often accompanied by feelings of isolation and disconnection from others."
+        },
+        {
+          "expression": "loneliness",
+          "description": "In Rwandan culture, being left behind can lead to significant feelings of loneliness due to the strong emphasis on community bonds and collective identity. This expression highlights the user's sense of separation from their loved one."
+        },
+        {
+          "pattern": "feeling empty",
+          "description": "Youth in Rwanda, like elsewhere, often express feelings of emptiness when experiencing significant emotional loss or change. This is a natural response to the abrupt end of relationships and can manifest as sadness."
+        },
+        {
+          "pattern": "need for support",
+          "description": "The user's expression suggests they may be seeking understanding and connection from others who share similar experiences, which aligns with Rwandan cultural values that emphasize community and mutual support during times of emotional distress."
+        }
+      ],
+      "intensity": "high",
+      "emotions": {
+        "joy": 0.0,
+        "sadness": 0.95,
+        "anger": 0.0,
+        "fear": 0.0,
+        "disgust": 0.0,
+        "surprise": 0.0,
+        "trust": 0.0,
+        "anticipation": 0.0,
+        "anxiety": 0.05,
+        "contempt": 0.0
+      },
+      "cultural_context": {
+        "language": "en",
+        "cultural_indicators": [
+          {
+            "expression": "emptiness",
+            "description": "A common Rwandan expression for a deep sense of loneliness or void within oneself, often accompanied by feelings of isolation and disconnection from others."
+          },
+          {
+            "expression": "loneliness",
+            "description": "In Rwandan culture, being left behind can lead to significant feelings of loneliness due to the strong emphasis on community bonds and collective identity. This expression highlights the user's sense of separation from their loved one."
+          }
+        ],
+        "youth_patterns": [
+          {
+            "pattern": "feeling empty",
+            "description": "Youth in Rwanda, like elsewhere, often express feelings of emptiness when experiencing significant emotional loss or change. This is a natural response to the abrupt end of relationships and can manifest as sadness."
+          },
+          {
+            "pattern": "need for support",
+            "description": "The user's expression suggests they may be seeking understanding and connection from others who share similar experiences, which aligns with Rwandan cultural values that emphasize community and mutual support during times of emotional distress."
+          }
+        ],
+        "appropriateness": "high"
+      }
+    }
+  },
+  {
+    "text": "It breaks my heart to see him suffering like this.",
+    "true_label": "sadness",
+    "predicted_label": "sadness",
+    "confidence": 0.9,
+    "emotions_distribution": {
+      "joy": 0.0,
+      "sadness": 1.0,
+      "anger": 0.0,
+      "fear": 0.0,
+      "disgust": 0.0,
+      "surprise": 0.0,
+      "trust": 0.0,
+      "anticipation": 0.0,
+      "anxiety": 0.0,
+      "contempt": 0.0
+    },
+    "full_response": {
+      "emotion": "sadness",
+      "confidence": 0.9,
+      "reasoning": "The user's statement 'It breaks my heart to see him suffering like this.' expresses a strong feeling of sadness and empathy for the person in pain, indicating primary emotion of sadness with high confidence.",
+      "keywords": [
+        "heart",
+        "suffering",
+        "Ubuntu philosophy emphasizes community and interconnectedness",
+        "Emotions may be expressed more indirectly in Rwandan culture"
+      ],
+      "intensity": "high",
+      "emotions": {
+        "joy": 0.0,
+        "sadness": 1.0,
+        "anger": 0.0,
+        "fear": 0.0,
+        "disgust": 0.0,
+        "surprise": 0.0,
+        "trust": 0.0,
+        "anticipation": 0.0,
+        "anxiety": 0.0,
+        "contempt": 0.0
+      },
+      "cultural_context": {
+        "language": "en",
+        "cultural_indicators": [
+          "Ubuntu philosophy emphasizes community and interconnectedness",
+          "Emotions may be expressed more indirectly in Rwandan culture"
+        ],
+        "youth_patterns": [],
+        "appropriateness": "medium"
+      }
+    }
+  },
+  {
+    "text": "I missed the opportunity and now it's gone forever.",
+    "true_label": "sadness",
+    "predicted_label": "sadness",
+    "confidence": 0.9,
+    "emotions_distribution": {
+      "joy": 0.0,
+      "sadness": 0.9,
+      "anger": 0.1,
+      "fear": 0.05,
+      "disgust": 0.05,
+      "surprise": 0.05,
+      "trust": 0.05,
+      "anticipation": 0.05,
+      "anxiety": 0.0,
+      "contempt": 0.0
+    },
+    "full_response": {
+      "emotion": "sadness",
+      "confidence": 0.9,
+      "reasoning": "The user's text expresses a sense of missed opportunity and the feeling that it is now gone forever, which strongly indicates sadness as the primary emotion. The use of 'now' emphasizes the permanence of this loss.",
+      "keywords": [
+        "missed",
+        "opportunity",
+        "gone",
+        "Ubuntu philosophy emphasizing community and interconnectedness",
+        "Using 'missed' to express loss rather than direct words like 'I lost'"
+      ],
+      "intensity": "high",
+      "emotions": {
+        "joy": 0.0,
+        "sadness": 0.9,
+        "anger": 0.1,
+        "fear": 0.05,
+        "disgust": 0.05,
+        "surprise": 0.05,
+        "trust": 0.05,
+        "anticipation": 0.05,
+        "anxiety": 0.0,
+        "contempt": 0.0
+      },
+      "cultural_context": {
+        "language": "en",
+        "cultural_indicators": [
+          "Ubuntu philosophy emphasizing community and interconnectedness"
+        ],
+        "youth_patterns": [
+          "Using 'missed' to express loss rather than direct words like 'I lost'"
+        ],
+        "appropriateness": "high"
+      }
+    }
+  },
+  {
+    "text": "The news of the accident was devastating.",
+    "true_label": "sadness",
+    "predicted_label": "neutral",
+    "confidence": 0.3,
+    "emotions_distribution": {
+      "joy": 0.0,
+      "sadness": 0.0,
+      "anger": 0.0,
+      "fear": 0.0,
+      "disgust": 0.0,
+      "surprise": 0.0,
+      "trust": 0.0,
+      "anticipation": 0.0,
+      "anxiety": 0.0,
+      "contempt": 0.0
+    },
+    "full_response": {
+      "emotion": "neutral",
+      "confidence": 0.3,
+      "reasoning": "Fallback emotion classification due to parsing error",
+      "keywords": [
+        "cultural_context",
+        "fallback"
+      ],
+      "intensity": "low",
+      "emotions": {
+        "joy": 0.0,
+        "sadness": 0.0,
+        "anger": 0.0,
+        "fear": 0.0,
+        "disgust": 0.0,
+        "surprise": 0.0,
+        "trust": 0.0,
+        "anticipation": 0.0,
+        "anxiety": 0.0,
+        "contempt": 0.0
+      },
+      "cultural_context": {
+        "language": "en",
+        "error": "parsing_failed"
+      }
+    }
+  },
+  {
+    "text": "I just want to curl up in bed and cry all day.",
+    "true_label": "sadness",
+    "predicted_label": "sadness",
+    "confidence": 0.9,
+    "emotions_distribution": {
+      "joy": 0.0,
+      "sadness": 1.0,
+      "anger": 0.0,
+      "fear": 0.3,
+      "disgust": 0.05,
+      "surprise": 0.0,
+      "trust": 0.15,
+      "anticipation": 0.05,
+      "anxiety": 0.2,
+      "contempt": 0.0
+    },
+    "full_response": {
+      "emotion": "sadness",
+      "confidence": 0.9,
+      "reasoning": "The text expresses a strong feeling of sadness and despair, as indicated by the user's desire to 'curl up in bed' and 'cry all day'. The mention of crying is culturally sensitive language that conveys deep emotional pain. There are also subtle anxiety and fear indicators due to the overwhelming nature of their distress.",
+      "keywords": [
+        "cry",
+        "bed",
+        "curling up in bed",
+        "cry all day",
+        "expressive through physical actions (e.g., crying)"
+      ],
+      "intensity": "high",
+      "emotions": {
+        "joy": 0.0,
+        "sadness": 1.0,
+        "anger": 0.0,
+        "fear": 0.3,
+        "disgust": 0.05,
+        "surprise": 0.0,
+        "trust": 0.15,
+        "anticipation": 0.05,
+        "anxiety": 0.2,
+        "contempt": 0.0
+      },
+      "cultural_context": {
+        "language": "en",
+        "cultural_indicators": [
+          "curling up in bed",
+          "cry all day"
+        ],
+        "youth_patterns": [
+          "expressive through physical actions (e.g., crying)"
+        ],
+        "appropriateness": "high"
+      }
+    }
+  },
+  {
+    "text": "How dare they treat me with such disrespect!",
+    "true_label": "anger",
+    "predicted_label": "anger",
+    "confidence": 0.9,
+    "emotions_distribution": {
+      "joy": 0.0,
+      "sadness": 0.0,
+      "anger": 0.9,
+      "fear": 0.0,
+      "disgust": 0.2,
+      "surprise": 0.1,
+      "trust": 0.0,
+      "anticipation": 0.0,
+      "anxiety": 0.0,
+      "contempt": 0.0
+    },
+    "full_response": {
+      "emotion": "anger",
+      "confidence": 0.9,
+      "reasoning": "The user expresses strong anger and indignation towards being treated disrespectfully, which aligns with the primary emotion of 'anger' in this context.",
+      "keywords": [
+        "respect",
+        "treated",
+        {
+          "indication": "direct expression of anger",
+          "description": "The user directly expresses their strong feelings without any apparent attempt to mask or downplay the emotion."
+        },
+        "expression through verbal aggression",
+        "feeling overwhelmed by perceived injustice"
+      ],
+      "intensity": "high",
+      "emotions": {
+        "joy": 0.0,
+        "sadness": 0.0,
+        "anger": 0.9,
+        "fear": 0.0,
+        "disgust": 0.2,
+        "surprise": 0.1,
+        "trust": 0.0,
+        "anticipation": 0.0,
+        "anxiety": 0.0,
+        "contempt": 0.0
+      },
+      "cultural_context": {
+        "language": "en",
+        "cultural_indicators": [
+          {
+            "indication": "direct expression of anger",
+            "description": "The user directly expresses their strong feelings without any apparent attempt to mask or downplay the emotion."
+          }
+        ],
+        "youth_patterns": [
+          "expression through verbal aggression",
+          "feeling overwhelmed by perceived injustice"
+        ],
+        "appropriateness": "high"
+      }
+    }
+  },
+  {
+    "text": "I am absolutely furious about the billing error.",
+    "true_label": "anger",
+    "predicted_label": "anger",
+    "confidence": 0.98,
+    "emotions_distribution": {
+      "joy": 0.0,
+      "sadness": 0.0,
+      "anger": 1.0,
+      "fear": 0.05,
+      "disgust": 0.02,
+      "surprise": 0.01,
+      "trust": 0.02,
+      "anticipation": 0.03,
+      "anxiety": 0.0,
+      "contempt": 0.0
+    },
+    "full_response": {
+      "emotion": "anger",
+      "confidence": 0.98,
+      "reasoning": "The user's primary emotion is expressed through the word 'furious', which strongly indicates intense anger or displeasure about a billing error. There are no other emotions present in this single-word statement.",
+      "keywords": [
+        "furious",
+        "direct_expression_of_displeasure",
+        "strong_negative_feeling"
+      ],
+      "intensity": "high",
+      "emotions": {
+        "joy": 0.0,
+        "sadness": 0.0,
+        "anger": 1.0,
+        "fear": 0.05,
+        "disgust": 0.02,
+        "surprise": 0.01,
+        "trust": 0.02,
+        "anticipation": 0.03,
+        "anxiety": 0.0,
+        "contempt": 0.0
+      },
+      "cultural_context": {
+        "language": "en",
+        "cultural_indicators": [
+          "direct_expression_of_displeasure",
+          "strong_negative_feeling"
+        ],
+        "youth_patterns": [],
+        "appropriateness": "high"
+      }
+    }
+  },
+  {
+    "text": "Stop interrupting me when I'm speaking!",
+    "true_label": "anger",
+    "predicted_label": "anger",
+    "confidence": 0.9,
+    "emotions_distribution": {
+      "joy": 0.0,
+      "sadness": 0.0,
+      "anger": 1.0,
+      "fear": 0.0,
+      "disgust": 0.0,
+      "surprise": 0.0,
+      "trust": 0.0,
+      "anticipation": 0.0,
+      "anxiety": 0.0,
+      "contempt": 0.0
+    },
+    "full_response": {
+      "emotion": "anger",
+      "confidence": 0.9,
+      "reasoning": "The primary emotion expressed in the text is anger, as indicated by the user's frustration and annoyance at being interrupted while speaking. There are no other apparent emotions present.",
+      "keywords": [
+        "interrupt",
+        "me",
+        {
+          "emotion": "anger",
+          "pattern": "Direct expression of frustration or irritation when feeling unheard or undervalued.",
+          "description": "Youth may express anger more overtly, such as interrupting others to convey their feelings."
+        }
+      ],
+      "intensity": "high",
+      "emotions": {
+        "joy": 0.0,
+        "sadness": 0.0,
+        "anger": 1.0,
+        "fear": 0.0,
+        "disgust": 0.0,
+        "surprise": 0.0,
+        "trust": 0.0,
+        "anticipation": 0.0,
+        "anxiety": 0.0,
+        "contempt": 0.0
+      },
+      "cultural_context": {
+        "language": "en",
+        "cultural_indicators": [],
+        "youth_patterns": [
+          {
+            "emotion": "anger",
+            "pattern": "Direct expression of frustration or irritation when feeling unheard or undervalued.",
+            "description": "Youth may express anger more overtly, such as interrupting others to convey their feelings."
+          }
+        ],
+        "appropriateness": "high"
+      }
+    }
+  },
+  {
+    "text": "It makes me so mad when people cut in line.",
+    "true_label": "anger",
+    "predicted_label": "anger",
+    "confidence": 1.0,
+    "emotions_distribution": {
+      "joy": 0.0,
+      "sadness": 0.0,
+      "anger": 1.0,
+      "fear": 0.0,
+      "disgust": 0.0,
+      "surprise": 0.0,
+      "trust": 0.0,
+      "anticipation": 0.0,
+      "anxiety": 0.0,
+      "contempt": 0.0
+    },
+    "full_response": {
+      "emotion": "anger",
+      "confidence": 1.0,
+      "reasoning": "The text expresses strong negative emotion towards being cut out of a queue, which is a clear indicator of anger.",
+      "keywords": [
+        "cut in line",
+        "direct confrontation",
+        "frustration with perceived injustice"
+      ],
+      "intensity": "high",
+      "emotions": {
+        "joy": 0.0,
+        "sadness": 0.0,
+        "anger": 1.0,
+        "fear": 0.0,
+        "disgust": 0.0,
+        "surprise": 0.0,
+        "trust": 0.0,
+        "anticipation": 0.0,
+        "anxiety": 0.0,
+        "contempt": 0.0
+      },
+      "cultural_context": {
+        "language": "en",
+        "cultural_indicators": [
+          "direct confrontation",
+          "frustration with perceived injustice"
+        ],
+        "youth_patterns": [],
+        "appropriateness": "high"
+      }
+    }
+  },
+  {
+    "text": "I can't believe he lied to my face like that.",
+    "true_label": "anger",
+    "predicted_label": "anger",
+    "confidence": 0.95,
+    "emotions_distribution": {
+      "joy": 0.0,
+      "sadness": 0.0,
+      "anger": 1.0,
+      "fear": 0.0,
+      "disgust": 0.0,
+      "surprise": 0.0,
+      "trust": 0.0,
+      "anticipation": 0.0,
+      "anxiety": 0.0,
+      "contempt": 0.0
+    },
+    "full_response": {
+      "emotion": "anger",
+      "confidence": 0.95,
+      "reasoning": "The primary emotion expressed in this text is anger, likely due to the speaker's disbelief and frustration at being lied to directly by someone they know or trust. The use of 'like that' emphasizes the specific act of lying which triggers strong emotional response.",
+      "keywords": [
+        "lie",
+        "face",
+        "direct confrontation",
+        "family/social context"
+      ],
+      "intensity": "high",
+      "emotions": {
+        "joy": 0.0,
+        "sadness": 0.0,
+        "anger": 1.0,
+        "fear": 0.0,
+        "disgust": 0.0,
+        "surprise": 0.0,
+        "trust": 0.0,
+        "anticipation": 0.0,
+        "anxiety": 0.0,
+        "contempt": 0.0
+      },
+      "cultural_context": {
+        "language": "en",
+        "cultural_indicators": [
+          "direct confrontation",
+          "family/social context"
+        ],
+        "youth_patterns": [],
+        "appropriateness": "medium"
+      }
+    }
+  },
+  {
+    "text": "I'm terrified of what might happen if I fail.",
+    "true_label": "fear",
+    "predicted_label": "fear",
+    "confidence": 0.95,
+    "emotions_distribution": {
+      "joy": 0.0,
+      "sadness": 0.05,
+      "anger": 0.03,
+      "fear": 0.95,
+      "disgust": 0.01,
+      "surprise": 0.01,
+      "trust": 0.04,
+      "anticipation": 0.01,
+      "anxiety": 0.02,
+      "contempt": 0.0
+    },
+    "full_response": {
+      "emotion": "fear",
+      "confidence": 0.95,
+      "reasoning": "The user expresses intense fear about potential failure, which is a common emotion associated with anxiety and stress in youth. The mention of 'failing' directly links to this emotional state.",
+      "keywords": [
+        "terrified",
+        "what might happen",
+        {
+          "indicator": "Ubuntu philosophy emphasizes community and interconnectedness",
+          "description": "The user's fear of failure may be linked to their desire for acceptance within the family or larger community, reflecting Rwandan cultural values."
+        },
+        "high anxiety levels in youth due to academic pressure",
+        "expressing fears through indirect language"
+      ],
+      "intensity": "high",
+      "emotions": {
+        "joy": 0.0,
+        "sadness": 0.05,
+        "anger": 0.03,
+        "fear": 0.95,
+        "disgust": 0.01,
+        "surprise": 0.01,
+        "trust": 0.04,
+        "anticipation": 0.01,
+        "anxiety": 0.02,
+        "contempt": 0.0
+      },
+      "cultural_context": {
+        "language": "en",
+        "cultural_indicators": [
+          {
+            "indicator": "Ubuntu philosophy emphasizes community and interconnectedness",
+            "description": "The user's fear of failure may be linked to their desire for acceptance within the family or larger community, reflecting Rwandan cultural values."
+          }
+        ],
+        "youth_patterns": [
+          "high anxiety levels in youth due to academic pressure",
+          "expressing fears through indirect language"
+        ],
+        "appropriateness": "high"
+      }
+    }
+  },
+  {
+    "text": "The sound of footsteps behind me made me freeze.",
+    "true_label": "fear",
+    "predicted_label": "fear",
+    "confidence": 0.85,
+    "emotions_distribution": {
+      "joy": 0.0,
+      "sadness": 0.4,
+      "anger": 0.0,
+      "fear": 0.8,
+      "disgust": 0.0,
+      "surprise": 0.2,
+      "trust": 0.0,
+      "anticipation": 0.0,
+      "anxiety": 0.0,
+      "contempt": 0.0
+    },
+    "full_response": {
+      "emotion": "fear",
+      "confidence": 0.85,
+      "reasoning": "The user expresses a sudden physical reaction (freezing) in response to the sound of footsteps behind them, which likely evoked feelings of fear and possibly sadness due to being startled or concerned about their safety.",
+      "keywords": [
+        "freeze",
+        "Freezing in response to an unexpected sound is a common reaction across many cultures, often indicating fear of perceived danger or loss.",
+        "Youth may experience strong emotions more intensely than adults and may express them through physical reactions like freezing.",
+        "The use of the first-person singular ('I') suggests that this is a personal experience for the user, which can make emotional expressions even more vivid."
+      ],
+      "intensity": "high",
+      "emotions": {
+        "joy": 0.0,
+        "sadness": 0.4,
+        "anger": 0.0,
+        "fear": 0.8,
+        "disgust": 0.0,
+        "surprise": 0.2,
+        "trust": 0.0,
+        "anticipation": 0.0,
+        "anxiety": 0.0,
+        "contempt": 0.0
+      },
+      "cultural_context": {
+        "language": "en",
+        "cultural_indicators": [
+          "Freezing in response to an unexpected sound is a common reaction across many cultures, often indicating fear of perceived danger or loss."
+        ],
+        "youth_patterns": [
+          "Youth may experience strong emotions more intensely than adults and may express them through physical reactions like freezing.",
+          "The use of the first-person singular ('I') suggests that this is a personal experience for the user, which can make emotional expressions even more vivid."
+        ],
+        "appropriateness": "high"
+      }
+    }
+  },
+  {
+    "text": "I'm scared that I won't be able to pay the rent.",
+    "true_label": "fear",
+    "predicted_label": "sadness",
+    "confidence": 0.8,
+    "emotions_distribution": {
+      "joy": 0.0,
+      "sadness": 0.8,
+      "anger": 0.0,
+      "fear": 0.0,
+      "disgust": 0.0,
+      "surprise": 0.0,
+      "trust": 0.0,
+      "anticipation": 0.0,
+      "anxiety": 0.6,
+      "contempt": 0.0
+    },
+    "full_response": {
+      "emotion": "sadness",
+      "confidence": 0.8,
+      "reasoning": "The user expresses fear of not being able to pay their rent, which is a significant financial concern that can lead to sadness and anxiety. The keywords 'scared' and 'pay the rent' indicate these emotions.",
+      "keywords": [
+        "scared",
+        "pay the rent",
+        "Ubuntu philosophy emphasizes community and interconnectedness",
+        "Emotions may be expressed more indirectly in Rwandan culture",
+        "Youth may use different emotional vocabulary",
+        "Cultural stigma may influence how emotions are communicated"
+      ],
+      "intensity": "high",
+      "emotions": {
+        "joy": 0.0,
+        "sadness": 0.8,
+        "anger": 0.0,
+        "fear": 0.0,
+        "disgust": 0.0,
+        "surprise": 0.0,
+        "trust": 0.0,
+        "anticipation": 0.0,
+        "anxiety": 0.6,
+        "contempt": 0.0
+      },
+      "cultural_context": {
+        "language": "en",
+        "cultural_indicators": [
+          "Ubuntu philosophy emphasizes community and interconnectedness",
+          "Emotions may be expressed more indirectly in Rwandan culture"
+        ],
+        "youth_patterns": [
+          "Youth may use different emotional vocabulary",
+          "Cultural stigma may influence how emotions are communicated"
+        ],
+        "appropriateness": "high"
+      }
+    }
+  },
+  {
+    "text": "The thought of public speaking gives me panic attacks.",
+    "true_label": "fear",
+    "predicted_label": "anxiety",
+    "confidence": 0.9,
+    "emotions_distribution": {
+      "joy": 0.0,
+      "sadness": 0.1,
+      "anger": 0.0,
+      "fear": 0.0,
+      "disgust": 0.0,
+      "surprise": 0.0,
+      "trust": 0.0,
+      "anticipation": 0.0,
+      "anxiety": 0.9,
+      "contempt": 0.0
+    },
+    "full_response": {
+      "emotion": "anxiety",
+      "confidence": 0.9,
+      "reasoning": "The primary emotion expressed in this text is anxiety, as indicated by the word 'panic'. The context of public speaking further amplifies this feeling, making it a significant source of distress for the individual.",
+      "keywords": [
+        "panic attacks",
+        "public speaking",
+        "Ubuntu philosophy emphasizes community and interconnectedness",
+        "Emotions may be expressed more indirectly in Rwandan culture",
+        "Youth may use different emotional vocabulary; 'panic attacks' is a specific term for anxiety that might not apply to all age groups"
+      ],
+      "intensity": "high",
+      "emotions": {
+        "joy": 0.0,
+        "sadness": 0.1,
+        "anger": 0.0,
+        "fear": 0.0,
+        "disgust": 0.0,
+        "surprise": 0.0,
+        "trust": 0.0,
+        "anticipation": 0.0,
+        "anxiety": 0.9,
+        "contempt": 0.0
+      },
+      "cultural_context": {
+        "language": "en",
+        "cultural_indicators": [
+          "Ubuntu philosophy emphasizes community and interconnectedness",
+          "Emotions may be expressed more indirectly in Rwandan culture"
+        ],
+        "youth_patterns": [
+          "Youth may use different emotional vocabulary; 'panic attacks' is a specific term for anxiety that might not apply to all age groups"
+        ],
+        "appropriateness": "high"
+      }
+    }
+  },
+  {
+    "text": "I have a bad feeling about this dark alley.",
+    "true_label": "fear",
+    "predicted_label": "fear",
+    "confidence": 0.95,
+    "emotions_distribution": {
+      "joy": 0.0,
+      "sadness": 0.0,
+      "anger": 0.0,
+      "fear": 1.0,
+      "disgust": 0.0,
+      "surprise": 0.0,
+      "trust": 0.0,
+      "anticipation": 0.0,
+      "anxiety": 0.0,
+      "contempt": 0.0
+    },
+    "full_response": {
+      "emotion": "fear",
+      "confidence": 0.95,
+      "reasoning": "The user's text 'I have a bad feeling about this dark alley' expresses strong negative emotions, primarily fear and anxiety due to the perceived danger in the described location. The absence of any positive or neutral words indicates high intensity sadness is not present.",
+      "keywords": [
+        "bad feeling",
+        {
+          "expression": "Indirect expression of fear through metaphorical language about 'bad feelings' and the dark alley."
+        },
+        {
+          "contextual_note": "Rwandan culture often expresses emotions indirectly, using metaphors to convey inner experiences. The use of 'dark alley' is a common Rwandan idiom for expressing deep-seated fears or anxieties in unfamiliar environments."
+        },
+        {
+          "pattern": "Use of metaphorical language and indirect expression of emotions.",
+          "description": "Youth, especially those from informal settings like urban areas, frequently use metaphors to convey complex emotional states without explicitly stating them. The phrase 'bad feeling' is a typical example."
+        }
+      ],
+      "intensity": "high",
+      "emotions": {
+        "joy": 0.0,
+        "sadness": 0.0,
+        "anger": 0.0,
+        "fear": 1.0,
+        "disgust": 0.0,
+        "surprise": 0.0,
+        "trust": 0.0,
+        "anticipation": 0.0,
+        "anxiety": 0.0,
+        "contempt": 0.0
+      },
+      "cultural_context": {
+        "language": "en",
+        "cultural_indicators": [
+          {
+            "expression": "Indirect expression of fear through metaphorical language about 'bad feelings' and the dark alley."
+          },
+          {
+            "contextual_note": "Rwandan culture often expresses emotions indirectly, using metaphors to convey inner experiences. The use of 'dark alley' is a common Rwandan idiom for expressing deep-seated fears or anxieties in unfamiliar environments."
+          }
+        ],
+        "youth_patterns": [
+          {
+            "pattern": "Use of metaphorical language and indirect expression of emotions.",
+            "description": "Youth, especially those from informal settings like urban areas, frequently use metaphors to convey complex emotional states without explicitly stating them. The phrase 'bad feeling' is a typical example."
+          }
+        ],
+        "appropriateness": "high"
+      }
+    }
+  },
+  {
+    "text": "That smell coming from the fridge is revolting.",
+    "true_label": "disgust",
+    "predicted_label": "disgust",
+    "confidence": 0.95,
+    "emotions_distribution": {
+      "joy": 0.0,
+      "sadness": 0.0,
+      "anger": 0.0,
+      "fear": 0.0,
+      "disgust": 1.0,
+      "surprise": 0.0,
+      "trust": 0.0,
+      "anticipation": 0.0,
+      "anxiety": 0.0,
+      "contempt": 0.0
+    },
+    "full_response": {
+      "emotion": "disgust",
+      "confidence": 0.95,
+      "reasoning": "The user's response 'That smell coming from the fridge is revolting.' expresses a strong negative emotional reaction to an unpleasant odor, indicating disgust as the primary emotion. The intensity of this feeling suggests it would be classified as high on our scale.",
+      "keywords": [
+        "revolting",
+        "direct expression of aversion to unpleasant smell",
+        "Rwandan cultural emphasis on personal hygiene and cleanliness"
+      ],
+      "intensity": "high",
+      "emotions": {
+        "joy": 0.0,
+        "sadness": 0.0,
+        "anger": 0.0,
+        "fear": 0.0,
+        "disgust": 1.0,
+        "surprise": 0.0,
+        "trust": 0.0,
+        "anticipation": 0.0,
+        "anxiety": 0.0,
+        "contempt": 0.0
+      },
+      "cultural_context": {
+        "language": "en",
+        "cultural_indicators": [
+          "direct expression of aversion to unpleasant smell",
+          "Rwandan cultural emphasis on personal hygiene and cleanliness"
+        ],
+        "youth_patterns": [],
+        "appropriateness": "high"
+      }
+    }
+  },
+  {
+    "text": "I can't stand the sight of cockroaches.",
+    "true_label": "disgust",
+    "predicted_label": "anger",
+    "confidence": 0.92,
+    "emotions_distribution": {
+      "joy": 0.0,
+      "sadness": 0.05,
+      "anger": 1.0,
+      "fear": 0.8,
+      "disgust": 0.2,
+      "surprise": 0.0,
+      "trust": 0.0,
+      "anticipation": 0.0,
+      "anxiety": 0.15,
+      "contempt": 0.05
+    },
+    "full_response": {
+      "emotion": "anger",
+      "confidence": 0.92,
+      "reasoning": "The user expressed a strong disgust and fear towards cockroaches, indicating intense negative emotions related to this topic.",
+      "keywords": [
+        "cockroaches",
+        {
+          "indication": "Emotions may be expressed more indirectly in Rwandan culture",
+          "relevance": true
+        },
+        {
+          "indication": "Family and community context affects emotional expression in Rwanda",
+          "relevance": false
+        },
+        {
+          "pattern": "Directness of emotion expression varies among youth compared to adults"
+        }
+      ],
+      "intensity": "high",
+      "emotions": {
+        "joy": 0.0,
+        "sadness": 0.05,
+        "anger": 1.0,
+        "fear": 0.8,
+        "disgust": 0.2,
+        "surprise": 0.0,
+        "trust": 0.0,
+        "anticipation": 0.0,
+        "anxiety": 0.15,
+        "contempt": 0.05
+      },
+      "cultural_context": {
+        "language": "en",
+        "cultural_indicators": [
+          {
+            "indication": "Emotions may be expressed more indirectly in Rwandan culture",
+            "relevance": true
+          },
+          {
+            "indication": "Family and community context affects emotional expression in Rwanda",
+            "relevance": false
+          }
+        ],
+        "youth_patterns": [
+          {
+            "pattern": "Directness of emotion expression varies among youth compared to adults"
+          }
+        ],
+        "appropriateness": "high"
+      }
+    }
+  },
+  {
+    "text": "His behavior at the dinner table was repulsive.",
+    "true_label": "disgust",
+    "predicted_label": "neutral",
+    "confidence": 0.3,
+    "emotions_distribution": {
+      "joy": 0.0,
+      "sadness": 0.0,
+      "anger": 0.0,
+      "fear": 0.0,
+      "disgust": 0.0,
+      "surprise": 0.0,
+      "trust": 0.0,
+      "anticipation": 0.0,
+      "anxiety": 0.0,
+      "contempt": 0.0
+    },
+    "full_response": {
+      "emotion": "neutral",
+      "confidence": 0.3,
+      "reasoning": "Fallback emotion classification due to parsing error",
+      "keywords": [
+        "cultural_context",
+        "fallback"
+      ],
+      "intensity": "low",
+      "emotions": {
+        "joy": 0.0,
+        "sadness": 0.0,
+        "anger": 0.0,
+        "fear": 0.0,
+        "disgust": 0.0,
+        "surprise": 0.0,
+        "trust": 0.0,
+        "anticipation": 0.0,
+        "anxiety": 0.0,
+        "contempt": 0.0
+      },
+      "cultural_context": {
+        "language": "en",
+        "error": "parsing_failed"
+      }
+    }
+  },
+  {
+    "text": "The food was spoiled and made me sick.",
+    "true_label": "disgust",
+    "predicted_label": "sadness",
+    "confidence": 0.85,
+    "emotions_distribution": {
+      "joy": 0.0,
+      "sadness": 0.8,
+      "anger": 0.2,
+      "fear": 0.1,
+      "disgust": 0.3,
+      "surprise": 0.05,
+      "trust": 0.05,
+      "anticipation": 0.0,
+      "anxiety": 0.0,
+      "contempt": 0.0
+    },
+    "full_response": {
+      "emotion": "sadness",
+      "confidence": 0.85,
+      "reasoning": "The primary emotion expressed in this text is sadness, likely due to the negative impact on their well-being from spoiled food. There are also subtle expressions of anger and fear related to the unpleasant experience. The disgust keyword indicates a physical reaction possibly caused by consuming contaminated food.",
+      "keywords": [
+        "spoiled",
+        "sick",
+        "Ubuntu philosophy emphasizes community and interconnectedness, which may influence how emotions are expressed in this context"
+      ],
+      "intensity": "high",
+      "emotions": {
+        "joy": 0.0,
+        "sadness": 0.8,
+        "anger": 0.2,
+        "fear": 0.1,
+        "disgust": 0.3,
+        "surprise": 0.05,
+        "trust": 0.05,
+        "anticipation": 0.0,
+        "anxiety": 0.0,
+        "contempt": 0.0
+      },
+      "cultural_context": {
+        "language": "en",
+        "cultural_indicators": [
+          "Ubuntu philosophy emphasizes community and interconnectedness, which may influence how emotions are expressed in this context"
+        ],
+        "youth_patterns": [],
+        "appropriateness": "medium"
+      }
+    }
+  },
+  {
+    "text": "I am disgusted by their lack of empathy.",
+    "true_label": "disgust",
+    "predicted_label": "anger",
+    "confidence": 0.95,
+    "emotions_distribution": {
+      "joy": 0.0,
+      "sadness": 0.0,
+      "anger": 1.0,
+      "fear": 0.0,
+      "disgust": 0.0,
+      "surprise": 0.0,
+      "trust": 0.0,
+      "anticipation": 0.0,
+      "anxiety": 0.0,
+      "contempt": 1.0
+    },
+    "full_response": {
+      "emotion": "anger",
+      "confidence": 0.95,
+      "reasoning": "The text expresses strong negative emotions, primarily anger and disgust due to the speaker's disapproval of another party's lack of empathy.",
+      "keywords": [
+        "disgusted",
+        "lack of empathy",
+        "direct confrontation",
+        "strong emotional response"
+      ],
+      "intensity": "high",
+      "emotions": {
+        "joy": 0.0,
+        "sadness": 0.0,
+        "anger": 1.0,
+        "fear": 0.0,
+        "disgust": 0.0,
+        "surprise": 0.0,
+        "trust": 0.0,
+        "anticipation": 0.0,
+        "anxiety": 0.0,
+        "contempt": 1.0
+      },
+      "cultural_context": {
+        "language": "en",
+        "cultural_indicators": [
+          "direct confrontation",
+          "strong emotional response"
+        ],
+        "youth_patterns": [],
+        "appropriateness": "medium"
+      }
+    }
+  },
+  {
+    "text": "I wasn't expecting a package today!",
+    "true_label": "surprise",
+    "predicted_label": "joy",
+    "confidence": 0.85,
+    "emotions_distribution": {
+      "joy": 0.8,
+      "sadness": 0.0,
+      "anger": 0.0,
+      "fear": 0.0,
+      "disgust": 0.0,
+      "surprise": 0.2,
+      "trust": 0.0,
+      "anticipation": 0.0,
+      "anxiety": 0.0,
+      "contempt": 0.0
+    },
+    "full_response": {
+      "emotion": "joy",
+      "confidence": 0.85,
+      "reasoning": "The user's statement 'I wasn't expecting a package today!' expresses excitement and anticipation, indicating joy. The mention of an unexpected event also conveys surprise.",
+      "keywords": [
+        "package",
+        "excitement",
+        "anticipation"
+      ],
+      "intensity": "high",
+      "emotions": {
+        "joy": 0.8,
+        "sadness": 0.0,
+        "anger": 0.0,
+        "fear": 0.0,
+        "disgust": 0.0,
+        "surprise": 0.2,
+        "trust": 0.0,
+        "anticipation": 0.0,
+        "anxiety": 0.0,
+        "contempt": 0.0
+      },
+      "cultural_context": {
+        "language": "en",
+        "cultural_indicators": [
+          "excitement",
+          "anticipation"
+        ],
+        "youth_patterns": [],
+        "appropriateness": "medium"
+      }
+    }
+  },
+  {
+    "text": "Wow, I didn't know you could play the piano.",
+    "true_label": "surprise",
+    "predicted_label": "joy",
+    "confidence": 0.8,
+    "emotions_distribution": {
+      "joy": 0.8,
+      "sadness": 0.0,
+      "anger": 0.0,
+      "fear": 0.02,
+      "disgust": 0.01,
+      "surprise": 0.9,
+      "trust": 0.0,
+      "anticipation": 0.2,
+      "anxiety": 0.05,
+      "contempt": 0.03
+    },
+    "full_response": {
+      "emotion": "joy",
+      "confidence": 0.8,
+      "reasoning": "The user's response 'Wow, I didn't know you could play the piano.' expresses a strong sense of joy and surprise at discovering someone else can play an instrument like themselves. This reflects positive emotions with high confidence.",
+      "keywords": [
+        "Wow",
+        "Ubuntu philosophy emphasizes community and interconnectedness",
+        "Emotions may be expressed more indirectly in Rwandan culture"
+      ],
+      "intensity": "high",
+      "emotions": {
+        "joy": 0.8,
+        "sadness": 0.0,
+        "anger": 0.0,
+        "fear": 0.02,
+        "disgust": 0.01,
+        "surprise": 0.9,
+        "trust": 0.0,
+        "anticipation": 0.2,
+        "anxiety": 0.05,
+        "contempt": 0.03
+      },
+      "cultural_context": {
+        "language": "en",
+        "cultural_indicators": [
+          "Ubuntu philosophy emphasizes community and interconnectedness",
+          "Emotions may be expressed more indirectly in Rwandan culture"
+        ],
+        "youth_patterns": [],
+        "appropriateness": "medium"
+      }
+    }
+  },
+  {
+    "text": "It was a shock to hear they are moving away.",
+    "true_label": "surprise",
+    "predicted_label": "sadness",
+    "confidence": 0.8,
+    "emotions_distribution": {
+      "joy": 0.0,
+      "sadness": 0.8,
+      "anger": 0.0,
+      "fear": 0.2,
+      "disgust": 0.0,
+      "surprise": 0.0,
+      "trust": 0.0,
+      "anticipation": 0.0,
+      "anxiety": 0.0,
+      "contempt": 0.0
+    },
+    "full_response": {
+      "emotion": "sadness",
+      "confidence": 0.8,
+      "reasoning": "The user expressed a strong sense of sadness at the news that someone is moving away, while also experiencing some fear about their own future or the other person's well-being.",
+      "keywords": [
+        "shock",
+        "moving away",
+        "Ubuntu philosophy emphasizes community and interconnectedness",
+        "Emotions may be expressed more indirectly in Rwandan culture"
+      ],
+      "intensity": "high",
+      "emotions": {
+        "joy": 0.0,
+        "sadness": 0.8,
+        "anger": 0.0,
+        "fear": 0.2,
+        "disgust": 0.0,
+        "surprise": 0.0,
+        "trust": 0.0,
+        "anticipation": 0.0,
+        "anxiety": 0.0,
+        "contempt": 0.0
+      },
+      "cultural_context": {
+        "language": "en",
+        "cultural_indicators": [
+          "Ubuntu philosophy emphasizes community and interconnectedness",
+          "Emotions may be expressed more indirectly in Rwandan culture"
+        ],
+        "youth_patterns": [],
+        "appropriateness": "medium"
+      }
+    }
+  },
+  {
+    "text": "I'm amazed by how quickly the kids have grown.",
+    "true_label": "surprise",
+    "predicted_label": "joy",
+    "confidence": 0.9,
+    "emotions_distribution": {
+      "joy": 1.0,
+      "sadness": 0.0,
+      "anger": 0.0,
+      "fear": 0.0,
+      "disgust": 0.0,
+      "surprise": 0.0,
+      "trust": 0.0,
+      "anticipation": 0.0,
+      "anxiety": 0.0,
+      "contempt": 0.0
+    },
+    "full_response": {
+      "emotion": "joy",
+      "confidence": 0.9,
+      "reasoning": "The primary emotion expressed in this text is joy, as the user expresses admiration for how quickly their children have grown. There are no other significant emotions present.",
+      "keywords": [
+        "amazed",
+        "kids",
+        "Ubuntu philosophy emphasizes community and interconnectedness",
+        "Emotions may be expressed more indirectly in Rwandan culture",
+        "Youth may use different emotional vocabulary; 'amazed' is a natural expression of joy for this age group"
+      ],
+      "intensity": "high",
+      "emotions": {
+        "joy": 1.0,
+        "sadness": 0.0,
+        "anger": 0.0,
+        "fear": 0.0,
+        "disgust": 0.0,
+        "surprise": 0.0,
+        "trust": 0.0,
+        "anticipation": 0.0,
+        "anxiety": 0.0,
+        "contempt": 0.0
+      },
+      "cultural_context": {
+        "language": "en",
+        "cultural_indicators": [
+          "Ubuntu philosophy emphasizes community and interconnectedness",
+          "Emotions may be expressed more indirectly in Rwandan culture"
+        ],
+        "youth_patterns": [
+          "Youth may use different emotional vocabulary; 'amazed' is a natural expression of joy for this age group"
+        ],
+        "appropriateness": "high"
+      }
+    }
+  },
+  {
+    "text": "Whoa, that car came out of nowhere!",
+    "true_label": "surprise",
+    "predicted_label": "surprise",
+    "confidence": 0.9,
+    "emotions_distribution": {
+      "joy": 0.8,
+      "sadness": 0.02,
+      "anger": 0.0,
+      "fear": 0.05,
+      "disgust": 0.01,
+      "surprise": 0.9,
+      "trust": 0.2,
+      "anticipation": 0.3,
+      "anxiety": 0.1,
+      "contempt": 0.0
+    },
+    "full_response": {
+      "emotion": "surprise",
+      "confidence": 0.9,
+      "reasoning": "The text expresses a strong sense of surprise and excitement at an unexpected event (the car coming out of nowhere). The use of the interjection 'Whoa' amplifies this emotion, indicating that it is genuine and not merely a casual remark. There are no negative emotions expressed in this short phrase.",
+      "keywords": [
+        "whoa",
+        "car",
+        "came out of nowhere",
+        "interjection",
+        "unexpected event"
+      ],
+      "intensity": "high",
+      "emotions": {
+        "joy": 0.8,
+        "sadness": 0.02,
+        "anger": 0.0,
+        "fear": 0.05,
+        "disgust": 0.01,
+        "surprise": 0.9,
+        "trust": 0.2,
+        "anticipation": 0.3,
+        "anxiety": 0.1,
+        "contempt": 0.0
+      },
+      "cultural_context": {
+        "language": "en",
+        "cultural_indicators": [
+          "interjection",
+          "unexpected event"
+        ],
+        "youth_patterns": [],
+        "appropriateness": "high"
+      }
+    }
+  },
+  {
+    "text": "I know I can count on you to keep my secret.",
+    "true_label": "trust",
+    "predicted_label": "trust",
+    "confidence": 0.9,
+    "emotions_distribution": {
+      "joy": 0.2,
+      "sadness": 0.4,
+      "anger": 0.1,
+      "fear": 0.1,
+      "disgust": 0.05,
+      "surprise": 0.05,
+      "trust": 0.8,
+      "anticipation": 0.15,
+      "anxiety": 0.0,
+      "contempt": 0.0
+    },
+    "full_response": {
+      "emotion": "trust",
+      "confidence": 0.9,
+      "reasoning": "The user expresses trust in the other person and mentions keeping a secret, indicating feelings of happiness (joy) and trusting nature. The sadness is moderate due to sharing personal information.",
+      "keywords": [
+        "count",
+        "secret",
+        "Ubuntu philosophy emphasizes community and interconnectedness",
+        "Emotions may be expressed more indirectly in Rwandan culture"
+      ],
+      "intensity": "medium",
+      "emotions": {
+        "joy": 0.2,
+        "sadness": 0.4,
+        "anger": 0.1,
+        "fear": 0.1,
+        "disgust": 0.05,
+        "surprise": 0.05,
+        "trust": 0.8,
+        "anticipation": 0.15,
+        "anxiety": 0.0,
+        "contempt": 0.0
+      },
+      "cultural_context": {
+        "language": "en",
+        "cultural_indicators": [
+          "Ubuntu philosophy emphasizes community and interconnectedness",
+          "Emotions may be expressed more indirectly in Rwandan culture"
+        ],
+        "youth_patterns": [],
+        "appropriateness": "medium"
+      }
+    }
+  },
+  {
+    "text": "She has always been a reliable friend.",
+    "true_label": "trust",
+    "predicted_label": "trust",
+    "confidence": 0.92,
+    "emotions_distribution": {
+      "joy": 0.5,
+      "sadness": 0.0,
+      "anger": 0.0,
+      "fear": 0.0,
+      "disgust": 0.0,
+      "surprise": 0.0,
+      "trust": 1.0,
+      "anticipation": 0.0,
+      "anxiety": 0.0,
+      "contempt": 0.0
+    },
+    "full_response": {
+      "emotion": "trust",
+      "confidence": 0.92,
+      "reasoning": "The text expresses a sense of appreciation and trust in the friend's reliability, which evokes positive emotions like joy and confidence. The word 'trust' is directly used to convey this emotion.",
+      "keywords": [
+        "always",
+        "reliable",
+        "Ubuntu philosophy emphasizes community and interconnectedness"
+      ],
+      "intensity": "high",
+      "emotions": {
+        "joy": 0.5,
+        "sadness": 0.0,
+        "anger": 0.0,
+        "fear": 0.0,
+        "disgust": 0.0,
+        "surprise": 0.0,
+        "trust": 1.0,
+        "anticipation": 0.0,
+        "anxiety": 0.0,
+        "contempt": 0.0
+      },
+      "cultural_context": {
+        "language": "en",
+        "cultural_indicators": [
+          "Ubuntu philosophy emphasizes community and interconnectedness"
+        ],
+        "youth_patterns": [],
+        "appropriateness": "medium"
+      }
+    }
+  },
+  {
+    "text": "I believe in his ability to lead the team.",
+    "true_label": "trust",
+    "predicted_label": "trust",
+    "confidence": 0.9,
+    "emotions_distribution": {
+      "joy": 0.5,
+      "sadness": 0.1,
+      "anger": 0.1,
+      "fear": 0.1,
+      "disgust": 0.1,
+      "surprise": 0.1,
+      "trust": 0.8,
+      "anticipation": 0.0,
+      "anxiety": 0.2,
+      "contempt": 0.0
+    },
+    "full_response": {
+      "emotion": "trust",
+      "confidence": 0.9,
+      "reasoning": [
+        "The user expresses confidence in someone's ability to lead, which is a positive sentiment.",
+        "Words like 'belief', 'ability', and 'lead' suggest optimism and trust."
+      ],
+      "keywords": [
+        "believe",
+        "ability",
+        "lead",
+        "The use of the pronoun 'his' implies a gender-neutral perspective, which is common in many cultures.",
+        "There's no indication of family or community context affecting emotional expression."
+      ],
+      "intensity": "high",
+      "emotions": {
+        "joy": 0.5,
+        "sadness": 0.1,
+        "anger": 0.1,
+        "fear": 0.1,
+        "disgust": 0.1,
+        "surprise": 0.1,
+        "trust": 0.8,
+        "anticipation": 0.0,
+        "anxiety": 0.2,
+        "contempt": 0.0
+      },
+      "cultural_context": {
+        "language": "en",
+        "cultural_indicators": [
+          "The use of the pronoun 'his' implies a gender-neutral perspective, which is common in many cultures.",
+          "There's no indication of family or community context affecting emotional expression."
+        ],
+        "youth_patterns": [],
+        "appropriateness": "medium"
+      }
+    }
+  },
+  {
+    "text": "I feel safe telling you my problems.",
+    "true_label": "trust",
+    "predicted_label": "trust",
+    "confidence": 0.9,
+    "emotions_distribution": {
+      "joy": 0.1,
+      "sadness": 0.8,
+      "anger": 0.05,
+      "fear": 0.2,
+      "disgust": 0.02,
+      "surprise": 0.03,
+      "trust": 0.9,
+      "anticipation": 0.1,
+      "anxiety": 0.08,
+      "contempt": 0.01
+    },
+    "full_response": {
+      "emotion": "trust",
+      "confidence": 0.9,
+      "reasoning": "The user expresses a sense of safety and openness when sharing their problems, indicating trust in the listener.",
+      "keywords": [
+        "feel",
+        "safe",
+        "Ubuntu philosophy emphasizes community and interconnectedness"
+      ],
+      "intensity": "high",
+      "emotions": {
+        "joy": 0.1,
+        "sadness": 0.8,
+        "anger": 0.05,
+        "fear": 0.2,
+        "disgust": 0.02,
+        "surprise": 0.03,
+        "trust": 0.9,
+        "anticipation": 0.1,
+        "anxiety": 0.08,
+        "contempt": 0.01
+      },
+      "cultural_context": {
+        "language": "en",
+        "cultural_indicators": [
+          "Ubuntu philosophy emphasizes community and interconnectedness"
+        ],
+        "youth_patterns": [],
+        "appropriateness": "medium"
+      }
+    }
+  },
+  {
+    "text": "We trust the process will yield good results.",
+    "true_label": "trust",
+    "predicted_label": "joy",
+    "confidence": 0.95,
+    "emotions_distribution": {
+      "joy": 0.5,
+      "sadness": 0.0,
+      "anger": 0.0,
+      "fear": 0.0,
+      "disgust": 0.0,
+      "surprise": 0.0,
+      "trust": 1.0,
+      "anticipation": 0.3,
+      "anxiety": 0.0,
+      "contempt": 0.0
+    },
+    "full_response": {
+      "emotion": "joy",
+      "confidence": 0.95,
+      "reasoning": "The text expresses a positive sentiment of trust in the process, which is associated with feelings of joy and anticipation while simultaneously conveying confidence (a key component of trust). No negative emotions are present.",
+      "keywords": [
+        "trust",
+        "Ubuntu philosophy emphasizes interconnectedness, which aligns with the sense of being part of a larger process"
+      ],
+      "intensity": "high",
+      "emotions": {
+        "joy": 0.5,
+        "sadness": 0.0,
+        "anger": 0.0,
+        "fear": 0.0,
+        "disgust": 0.0,
+        "surprise": 0.0,
+        "trust": 1.0,
+        "anticipation": 0.3,
+        "anxiety": 0.0,
+        "contempt": 0.0
+      },
+      "cultural_context": {
+        "language": "en",
+        "cultural_indicators": [
+          "Ubuntu philosophy emphasizes interconnectedness, which aligns with the sense of being part of a larger process"
+        ],
+        "youth_patterns": [],
+        "appropriateness": "medium"
+      }
+    }
+  },
+  {
+    "text": "I can't wait for the concert next week!",
+    "true_label": "anticipation",
+    "predicted_label": "joy",
+    "confidence": 0.98,
+    "emotions_distribution": {
+      "joy": 1.0,
+      "sadness": 0.0,
+      "anger": 0.0,
+      "fear": 0.0,
+      "disgust": 0.0,
+      "surprise": 0.0,
+      "trust": 0.0,
+      "anticipation": 0.95,
+      "anxiety": 0.05,
+      "contempt": 0.0
+    },
+    "full_response": {
+      "emotion": "joy",
+      "confidence": 0.98,
+      "reasoning": "The user expresses clear enthusiasm and excitement about attending a concert next week, indicating strong positive emotions of joy and anticipation.",
+      "keywords": [
+        "can't wait",
+        "concert",
+        "use of future tense ('next week')",
+        "exuberant positive emotions about social events"
+      ],
+      "intensity": "high",
+      "emotions": {
+        "joy": 1.0,
+        "sadness": 0.0,
+        "anger": 0.0,
+        "fear": 0.0,
+        "disgust": 0.0,
+        "surprise": 0.0,
+        "trust": 0.0,
+        "anticipation": 0.95,
+        "anxiety": 0.05,
+        "contempt": 0.0
+      },
+      "cultural_context": {
+        "language": "en",
+        "cultural_indicators": [
+          "use of future tense ('next week')"
+        ],
+        "youth_patterns": [
+          "exuberant positive emotions about social events"
+        ],
+        "appropriateness": "high"
+      }
+    }
+  },
+  {
+    "text": "I'm looking forward to starting my new job.",
+    "true_label": "anticipation",
+    "predicted_label": "joy",
+    "confidence": 0.98,
+    "emotions_distribution": {
+      "joy": 1.0,
+      "sadness": 0.0,
+      "anger": 0.0,
+      "fear": 0.0,
+      "disgust": 0.0,
+      "surprise": 0.0,
+      "trust": 0.0,
+      "anticipation": 1.0,
+      "anxiety": 0.0,
+      "contempt": 0.0
+    },
+    "full_response": {
+      "emotion": "joy",
+      "confidence": 0.98,
+      "reasoning": "The user expresses a positive emotion of anticipation and excitement about starting their new job, which indicates joy. There are no negative emotions or keywords present.",
+      "keywords": [
+        "looking forward",
+        "starting new job",
+        "Ubuntu philosophy emphasizes community and interconnectedness",
+        "Emotions may be expressed more indirectly in Rwandan culture"
+      ],
+      "intensity": "high",
+      "emotions": {
+        "joy": 1.0,
+        "sadness": 0.0,
+        "anger": 0.0,
+        "fear": 0.0,
+        "disgust": 0.0,
+        "surprise": 0.0,
+        "trust": 0.0,
+        "anticipation": 1.0,
+        "anxiety": 0.0,
+        "contempt": 0.0
+      },
+      "cultural_context": {
+        "language": "en",
+        "cultural_indicators": [
+          "Ubuntu philosophy emphasizes community and interconnectedness",
+          "Emotions may be expressed more indirectly in Rwandan culture"
+        ],
+        "youth_patterns": [],
+        "appropriateness": "medium"
+      }
+    }
+  },
+  {
+    "text": "The suspense is killing me, tell me the news!",
+    "true_label": "anticipation",
+    "predicted_label": "sadness",
+    "confidence": 0.9,
+    "emotions_distribution": {
+      "joy": 0.2,
+      "sadness": 1.0,
+      "anger": 0.05,
+      "fear": 0.5,
+      "disgust": 0.05,
+      "surprise": 0.05,
+      "trust": 0.1,
+      "anticipation": 0.2,
+      "anxiety": 0.3,
+      "contempt": 0.05
+    },
+    "full_response": {
+      "emotion": "sadness",
+      "confidence": 0.9,
+      "reasoning": "The user's text expresses strong emotions of fear and anxiety, with a sense of anticipation for news that may bring relief or change. The primary emotion is sadness due to the weight of these feelings. Secondary emotions include mild joy (curiosity) and moderate anxiety.",
+      "keywords": [
+        "suspense",
+        "killing me",
+        "direct expression of fear/anxiety",
+        "use of 'killing me' to intensify emotion",
+        "expressing intense emotions through vivid language"
+      ],
+      "intensity": "high",
+      "emotions": {
+        "joy": 0.2,
+        "sadness": 1.0,
+        "anger": 0.05,
+        "fear": 0.5,
+        "disgust": 0.05,
+        "surprise": 0.05,
+        "trust": 0.1,
+        "anticipation": 0.2,
+        "anxiety": 0.3,
+        "contempt": 0.05
+      },
+      "cultural_context": {
+        "language": "en",
+        "cultural_indicators": [
+          "direct expression of fear/anxiety",
+          "use of 'killing me' to intensify emotion"
+        ],
+        "youth_patterns": [
+          "expressing intense emotions through vivid language"
+        ],
+        "appropriateness": "high"
+      }
+    }
+  },
+  {
+    "text": "I'm eager to see how the movie ends.",
+    "true_label": "anticipation",
+    "predicted_label": "anticipation",
+    "confidence": 0.95,
+    "emotions_distribution": {
+      "joy": 0.5,
+      "sadness": 0.05,
+      "anger": 0.02,
+      "fear": 0.1,
+      "disgust": 0.01,
+      "surprise": 0.03,
+      "trust": 0.0,
+      "anticipation": 0.8,
+      "anxiety": 0.0,
+      "contempt": 0.0
+    },
+    "full_response": {
+      "emotion": "anticipation",
+      "confidence": 0.95,
+      "reasoning": "The user expresses eagerness to see how the movie ends, indicating a positive emotion of joy and anticipation about the conclusion of the film.",
+      "keywords": [
+        "end",
+        "movie",
+        {
+          "pattern": "expressing hope for a satisfying resolution",
+          "description": "Youth may express optimism and eagerness to know the outcome of events, similar to this user's desire to see how their movie ends."
+        }
+      ],
+      "intensity": "high",
+      "emotions": {
+        "joy": 0.5,
+        "sadness": 0.05,
+        "anger": 0.02,
+        "fear": 0.1,
+        "disgust": 0.01,
+        "surprise": 0.03,
+        "trust": 0.0,
+        "anticipation": 0.8,
+        "anxiety": 0.0,
+        "contempt": 0.0
+      },
+      "cultural_context": {
+        "language": "en",
+        "cultural_indicators": [],
+        "youth_patterns": [
+          {
+            "pattern": "expressing hope for a satisfying resolution",
+            "description": "Youth may express optimism and eagerness to know the outcome of events, similar to this user's desire to see how their movie ends."
+          }
+        ],
+        "appropriateness": "high"
+      }
+    }
+  },
+  {
+    "text": "Counting down the days until vacation.",
+    "true_label": "anticipation",
+    "predicted_label": "joy",
+    "confidence": 0.99,
+    "emotions_distribution": {
+      "joy": 1.0,
+      "sadness": 0.0,
+      "anger": 0.0,
+      "fear": 0.0,
+      "disgust": 0.0,
+      "surprise": 0.0,
+      "trust": 0.0,
+      "anticipation": 1.0,
+      "anxiety": 0.0,
+      "contempt": 0.0
+    },
+    "full_response": {
+      "emotion": "joy",
+      "confidence": 0.99,
+      "reasoning": "The text 'Counting down the days until vacation.' expresses strong positive emotions such as joy and anticipation, while expressing no sadness, anger, fear, disgust, surprise, trust or contempt.",
+      "keywords": [
+        "vacation",
+        "positive outlook on future events",
+        "expressing excitement about upcoming positive experiences"
+      ],
+      "intensity": "high",
+      "emotions": {
+        "joy": 1.0,
+        "sadness": 0.0,
+        "anger": 0.0,
+        "fear": 0.0,
+        "disgust": 0.0,
+        "surprise": 0.0,
+        "trust": 0.0,
+        "anticipation": 1.0,
+        "anxiety": 0.0,
+        "contempt": 0.0
+      },
+      "cultural_context": {
+        "language": "en",
+        "cultural_indicators": [
+          "positive outlook on future events"
+        ],
+        "youth_patterns": [
+          "expressing excitement about upcoming positive experiences"
+        ],
+        "appropriateness": "high"
+      }
+    }
+  },
+  {
+    "text": "I'm really nervous about the exam tomorrow.",
+    "true_label": "anxiety",
+    "predicted_label": "anxiety",
+    "confidence": 0.9,
+    "emotions_distribution": {
+      "joy": 0.0,
+      "sadness": 0.1,
+      "anger": 0.0,
+      "fear": 0.8,
+      "disgust": 0.05,
+      "surprise": 0.0,
+      "trust": 0.2,
+      "anticipation": 0.15,
+      "anxiety": 0.9,
+      "contempt": 0.0
+    },
+    "full_response": {
+      "emotion": "anxiety",
+      "confidence": 0.9,
+      "reasoning": "The user expresses strong negative emotions related to anxiety about a future event (the exam), with some mild sadness and joy, but no fear or disgust expressed. The focus is on the upcoming stressful situation.",
+      "keywords": [
+        "nervous",
+        "exam",
+        "tomorrow",
+        "Indirect expression of emotions",
+        "Use of future tense language",
+        "Emphasis on upcoming events causing stress"
+      ],
+      "intensity": "high",
+      "emotions": {
+        "joy": 0.0,
+        "sadness": 0.1,
+        "anger": 0.0,
+        "fear": 0.8,
+        "disgust": 0.05,
+        "surprise": 0.0,
+        "trust": 0.2,
+        "anticipation": 0.15,
+        "anxiety": 0.9,
+        "contempt": 0.0
+      },
+      "cultural_context": {
+        "language": "en",
+        "cultural_indicators": [
+          "Indirect expression of emotions"
+        ],
+        "youth_patterns": [
+          "Use of future tense language",
+          "Emphasis on upcoming events causing stress"
+        ],
+        "appropriateness": "high"
+      }
+    }
+  },
+  {
+    "text": "My heart races whenever I think about the deadline.",
+    "true_label": "anxiety",
+    "predicted_label": "anxiety",
+    "confidence": 1.0,
+    "emotions_distribution": {
+      "joy": 0.0,
+      "sadness": 1.0,
+      "anger": 0.0,
+      "fear": 0.0,
+      "disgust": 0.0,
+      "surprise": 0.0,
+      "trust": 0.0,
+      "anticipation": 0.2,
+      "anxiety": 1.0,
+      "contempt": 0.0
+    },
+    "full_response": {
+      "emotion": "anxiety",
+      "confidence": 1.0,
+      "reasoning": "The user expresses a strong emotional response to the thought of a deadline, which is associated with anxiety and fear in this context.",
+      "keywords": [
+        "heart races",
+        "deadline",
+        "Ubuntu philosophy emphasizes community and interconnectedness",
+        "Emotions may be expressed more indirectly",
+        "Youth may use different emotional vocabulary, especially when dealing with time-sensitive issues like deadlines"
+      ],
+      "intensity": "high",
+      "emotions": {
+        "joy": 0.0,
+        "sadness": 1.0,
+        "anger": 0.0,
+        "fear": 0.0,
+        "disgust": 0.0,
+        "surprise": 0.0,
+        "trust": 0.0,
+        "anticipation": 0.2,
+        "anxiety": 1.0,
+        "contempt": 0.0
+      },
+      "cultural_context": {
+        "language": "en",
+        "cultural_indicators": [
+          "Ubuntu philosophy emphasizes community and interconnectedness",
+          "Emotions may be expressed more indirectly"
+        ],
+        "youth_patterns": [
+          "Youth may use different emotional vocabulary, especially when dealing with time-sensitive issues like deadlines"
+        ],
+        "appropriateness": "high"
+      }
+    }
+  },
+  {
+    "text": "I can't stop worrying about the future.",
+    "true_label": "anxiety",
+    "predicted_label": "sadness",
+    "confidence": 0.84,
+    "emotions_distribution": {
+      "joy": 0.0,
+      "sadness": 0.8,
+      "anger": 0.0,
+      "fear": 0.5,
+      "disgust": 0.1,
+      "surprise": 0.05,
+      "trust": 0.2,
+      "anticipation": 0.15,
+      "anxiety": 0.6,
+      "contempt": 0.0
+    },
+    "full_response": {
+      "emotion": "sadness",
+      "confidence": 0.84,
+      "reasoning": "The text expresses a strong sense of sadness and anxiety about the future, with some fear mixed in. The primary emotion is sadness at 0.8 confidence score.",
+      "keywords": [
+        "worrying",
+        "future",
+        "Ubuntu philosophy emphasizes community and interconnectedness, so expressing worry about the future may be seen as a shared concern for all.",
+        "Youth in Rwanda often use indirect expressions of emotions rather than direct statements.",
+        "The mention of 'future' suggests potential anxiety related to academic or social pressures."
+      ],
+      "intensity": "high",
+      "emotions": {
+        "joy": 0.0,
+        "sadness": 0.8,
+        "anger": 0.0,
+        "fear": 0.5,
+        "disgust": 0.1,
+        "surprise": 0.05,
+        "trust": 0.2,
+        "anticipation": 0.15,
+        "anxiety": 0.6,
+        "contempt": 0.0
+      },
+      "cultural_context": {
+        "language": "en",
+        "cultural_indicators": [
+          "Ubuntu philosophy emphasizes community and interconnectedness, so expressing worry about the future may be seen as a shared concern for all."
+        ],
+        "youth_patterns": [
+          "Youth in Rwanda often use indirect expressions of emotions rather than direct statements.",
+          "The mention of 'future' suggests potential anxiety related to academic or social pressures."
+        ],
+        "appropriateness": "medium"
+      }
+    }
+  },
+  {
+    "text": "I feel a constant knot in my stomach.",
+    "true_label": "anxiety",
+    "predicted_label": "anxiety",
+    "confidence": 0.9,
+    "emotions_distribution": {
+      "joy": 0.0,
+      "sadness": 0.2,
+      "anger": 0.0,
+      "fear": 0.8,
+      "disgust": 0.0,
+      "surprise": 0.0,
+      "trust": 0.0,
+      "anticipation": 0.0,
+      "anxiety": 0.0,
+      "contempt": 0.0
+    },
+    "full_response": {
+      "emotion": "anxiety",
+      "confidence": 0.9,
+      "reasoning": "The user's statement 'I feel a constant knot in my stomach' strongly suggests anxiety or stress, as bodily sensations like physical discomfort are common triggers for these emotions. The intensity of the feeling is high and culturally sensitive to be interpreted within the context of youth emotional language patterns.",
+      "keywords": [
+        "knot",
+        "stomach",
+        "bodily sensations",
+        "comfort",
+        {
+          "pattern": "Bodily discomfort as anxiety indicator",
+          "description": "Youth often express internal bodily feelings (e.g., tightness, pain) to indicate emotional distress."
+        }
+      ],
+      "intensity": "high",
+      "emotions": {
+        "joy": 0.0,
+        "sadness": 0.2,
+        "anger": 0.0,
+        "fear": 0.8,
+        "disgust": 0.0,
+        "surprise": 0.0,
+        "trust": 0.0,
+        "anticipation": 0.0,
+        "anxiety": 0.0,
+        "contempt": 0.0
+      },
+      "cultural_context": {
+        "language": "en",
+        "cultural_indicators": [
+          "bodily sensations",
+          "comfort"
+        ],
+        "youth_patterns": [
+          {
+            "pattern": "Bodily discomfort as anxiety indicator",
+            "description": "Youth often express internal bodily feelings (e.g., tightness, pain) to indicate emotional distress."
+          }
+        ],
+        "appropriateness": "high"
+      }
+    }
+  },
+  {
+    "text": "What if everything goes wrong?",
+    "true_label": "anxiety",
+    "predicted_label": "sadness",
+    "confidence": 0.6,
+    "emotions_distribution": {
+      "joy": 0.0,
+      "sadness": 0.5,
+      "anger": 0.0,
+      "fear": 0.2,
+      "disgust": 0.1,
+      "surprise": 0.05,
+      "trust": 0.15,
+      "anticipation": 0.05,
+      "anxiety": 0.3,
+      "contempt": 0.0
+    },
+    "full_response": {
+      "emotion": "sadness",
+      "confidence": 0.6,
+      "reasoning": "The user's statement 'What if everything goes wrong?' expresses a sense of concern and worry about potential negative outcomes, which aligns with the emotion keywords sadness (worry), anxiety (concern), and fear (uncertainty). The use of 'everything' suggests a broad scope of possibilities.",
+      "keywords": [
+        "wrong",
+        "everything",
+        "Indirect expression of emotions is common in Rwandan culture",
+        "Community and family context can influence emotional communication",
+        "Youth may use language that emphasizes 'everything' to convey a sense of magnitude, which could be interpreted as sadness or anxiety"
+      ],
+      "intensity": "medium",
+      "emotions": {
+        "joy": 0.0,
+        "sadness": 0.5,
+        "anger": 0.0,
+        "fear": 0.2,
+        "disgust": 0.1,
+        "surprise": 0.05,
+        "trust": 0.15,
+        "anticipation": 0.05,
+        "anxiety": 0.3,
+        "contempt": 0.0
+      },
+      "cultural_context": {
+        "language": "en",
+        "cultural_indicators": [
+          "Indirect expression of emotions is common in Rwandan culture",
+          "Community and family context can influence emotional communication"
+        ],
+        "youth_patterns": [
+          "Youth may use language that emphasizes 'everything' to convey a sense of magnitude, which could be interpreted as sadness or anxiety"
+        ],
+        "appropriateness": "high"
+      }
+    }
+  },
+  {
+    "text": "He thinks he's better than everyone else.",
+    "true_label": "contempt",
+    "predicted_label": "anger",
+    "confidence": 0.8,
+    "emotions_distribution": {
+      "joy": 0.0,
+      "sadness": 0.1,
+      "anger": 0.8,
+      "fear": 0.1,
+      "disgust": 0.05,
+      "surprise": 0.02,
+      "trust": 0.03,
+      "anticipation": 0.02,
+      "anxiety": 0.2,
+      "contempt": 0.05
+    },
+    "full_response": {
+      "emotion": "anger",
+      "confidence": 0.8,
+      "reasoning": "The user's statement implies a sense of superiority or entitlement, which can trigger feelings of anger and contempt towards others perceived as inferior. There is no clear indication of sadness, fear, disgust, surprise, trust, anticipation, or anxiety in this single sentence.",
+      "keywords": [
+        "better than everyone else",
+        "The Rwandan cultural context emphasizes respect for others and community harmony. Expressing a sense of superiority could be seen as disrespectful or undermining this communal value.",
+        "Directly expressing feelings of anger may not be typical in casual en-speaking youth conversations, but the underlying emotion is likely present.",
+        "Youth might use more colloquial language to express similar emotions. For example, they could say 'I'm sick and tired of feeling like I'm always being put down.' or 'Why does everyone have to be so mean?'."
+      ],
+      "intensity": "high",
+      "emotions": {
+        "joy": 0.0,
+        "sadness": 0.1,
+        "anger": 0.8,
+        "fear": 0.1,
+        "disgust": 0.05,
+        "surprise": 0.02,
+        "trust": 0.03,
+        "anticipation": 0.02,
+        "anxiety": 0.2,
+        "contempt": 0.05
+      },
+      "cultural_context": {
+        "language": "en",
+        "cultural_indicators": [
+          "The Rwandan cultural context emphasizes respect for others and community harmony. Expressing a sense of superiority could be seen as disrespectful or undermining this communal value.",
+          "Directly expressing feelings of anger may not be typical in casual en-speaking youth conversations, but the underlying emotion is likely present."
+        ],
+        "youth_patterns": [
+          "Youth might use more colloquial language to express similar emotions. For example, they could say 'I'm sick and tired of feeling like I'm always being put down.' or 'Why does everyone have to be so mean?'."
+        ],
+        "appropriateness": "high"
+      }
+    }
+  },
+  {
+    "text": "I have nothing but disdain for liars.",
+    "true_label": "contempt",
+    "predicted_label": "anger",
+    "confidence": 1.0,
+    "emotions_distribution": {
+      "joy": 0.0,
+      "sadness": 0.0,
+      "anger": 1.0,
+      "fear": 0.2,
+      "disgust": 0.5,
+      "surprise": 0.0,
+      "trust": 0.0,
+      "anticipation": 0.0,
+      "anxiety": 0.0,
+      "contempt": 0.8
+    },
+    "full_response": {
+      "emotion": "anger",
+      "confidence": 1.0,
+      "reasoning": "The text expresses strong negative emotions towards liars, indicating high levels of anger and disgust while showing contempt for the behavior.",
+      "keywords": [
+        "disdain",
+        "liars",
+        {
+          "indicator": "direct expression of negative emotions",
+          "description": "In Rwandan culture, expressing strong dislike or disdain is common and not considered unusual for youth."
+        },
+        {
+          "indicator": "family/community context consideration",
+          "description": "While the emotion is expressed openly here, it's important to note that indirect expressions might be more typical in some contexts."
+        },
+        "open expression of strong emotions like anger and disgust",
+        "use of harsh language or metaphors"
+      ],
+      "intensity": "high",
+      "emotions": {
+        "joy": 0.0,
+        "sadness": 0.0,
+        "anger": 1.0,
+        "fear": 0.2,
+        "disgust": 0.5,
+        "surprise": 0.0,
+        "trust": 0.0,
+        "anticipation": 0.0,
+        "anxiety": 0.0,
+        "contempt": 0.8
+      },
+      "cultural_context": {
+        "language": "en",
+        "cultural_indicators": [
+          {
+            "indicator": "direct expression of negative emotions",
+            "description": "In Rwandan culture, expressing strong dislike or disdain is common and not considered unusual for youth."
+          },
+          {
+            "indicator": "family/community context consideration",
+            "description": "While the emotion is expressed openly here, it's important to note that indirect expressions might be more typical in some contexts."
+          }
+        ],
+        "youth_patterns": [
+          "open expression of strong emotions like anger and disgust",
+          "use of harsh language or metaphors"
+        ],
+        "appropriateness": "high"
+      }
+    }
+  },
+  {
+    "text": "She looked at him with a sneer of contempt.",
+    "true_label": "contempt",
+    "predicted_label": "anger",
+    "confidence": 0.9,
+    "emotions_distribution": {
+      "joy": 0.0,
+      "sadness": 0.0,
+      "anger": 1.0,
+      "fear": 0.0,
+      "disgust": 0.0,
+      "surprise": 0.0,
+      "trust": 0.0,
+      "anticipation": 0.0,
+      "anxiety": 0.0,
+      "contempt": 1.0
+    },
+    "full_response": {
+      "emotion": "anger",
+      "confidence": 0.9,
+      "reasoning": "The text explicitly contains the word 'sneer' and the concept of 'contempt'. These words strongly indicate an intense expression of anger or contempt towards someone, suggesting a negative emotional state.",
+      "keywords": [
+        "sneer",
+        "contempt",
+        {
+          "culture": "Rwandan",
+          "indicators": [
+            "direct confrontation",
+            "avoidance of direct conflict"
+          ],
+          "comment": "In Rwandan culture, expressing anger directly might be avoided due to the emphasis on maintaining harmony and avoiding shame. The expression 'sneer' could fit into this cultural context as a subtle form of contempt."
+        },
+        {
+          "pattern": "Direct confrontation avoidance",
+          "description": "Youth may express intense emotions through indirect means like disdainful looks or sarcastic remarks, rather than openly expressing anger.",
+          "comment": "The text aligns with this pattern as the emotion is expressed indirectly through a 'sneer' of contempt."
+        }
+      ],
+      "intensity": "high",
+      "emotions": {
+        "joy": 0.0,
+        "sadness": 0.0,
+        "anger": 1.0,
+        "fear": 0.0,
+        "disgust": 0.0,
+        "surprise": 0.0,
+        "trust": 0.0,
+        "anticipation": 0.0,
+        "anxiety": 0.0,
+        "contempt": 1.0
+      },
+      "cultural_context": {
+        "language": "en",
+        "cultural_indicators": [
+          {
+            "culture": "Rwandan",
+            "indicators": [
+              "direct confrontation",
+              "avoidance of direct conflict"
+            ],
+            "comment": "In Rwandan culture, expressing anger directly might be avoided due to the emphasis on maintaining harmony and avoiding shame. The expression 'sneer' could fit into this cultural context as a subtle form of contempt."
+          }
+        ],
+        "youth_patterns": [
+          {
+            "pattern": "Direct confrontation avoidance",
+            "description": "Youth may express intense emotions through indirect means like disdainful looks or sarcastic remarks, rather than openly expressing anger.",
+            "comment": "The text aligns with this pattern as the emotion is expressed indirectly through a 'sneer' of contempt."
+          }
+        ],
+        "appropriateness": "high"
+      }
+    }
+  },
+  {
+    "text": "They mocked our efforts to help.",
+    "true_label": "contempt",
+    "predicted_label": "sadness",
+    "confidence": 0.95,
+    "emotions_distribution": {
+      "joy": 0.0,
+      "sadness": 0.9,
+      "anger": 0.1,
+      "fear": 0.05,
+      "disgust": 0.05,
+      "surprise": 0.05,
+      "trust": 0.05,
+      "anticipation": 0.05,
+      "anxiety": 0.0,
+      "contempt": 0.0
+    },
+    "full_response": {
+      "emotion": "sadness",
+      "confidence": 0.95,
+      "reasoning": "The text expresses strong negative emotions towards the efforts made to help, indicating a deep sense of disappointment and betrayal. The primary emotion detected is sadness (0.9) due to the hurtful act being directed at those who were trying to assist others.",
+      "keywords": [
+        "mocked",
+        "efforts",
+        "Ubuntu philosophy emphasizes community and interconnectedness",
+        "Emotions may be expressed more indirectly in Rwandan culture",
+        {
+          "pattern": "Direct expression of negative emotions is less common among youth compared to adults.",
+          "description": "Youth might express their feelings through indirect means or by internalizing them."
+        },
+        {
+          "pattern": "Use of different emotional vocabulary, sometimes with more subtle language than adult counterparts.",
+          "description": "Emotional expressions may be nuanced and not as overtly expressed as in some other cultures."
+        }
+      ],
+      "intensity": "high",
+      "emotions": {
+        "joy": 0.0,
+        "sadness": 0.9,
+        "anger": 0.1,
+        "fear": 0.05,
+        "disgust": 0.05,
+        "surprise": 0.05,
+        "trust": 0.05,
+        "anticipation": 0.05,
+        "anxiety": 0.0,
+        "contempt": 0.0
+      },
+      "cultural_context": {
+        "language": "en",
+        "cultural_indicators": [
+          "Ubuntu philosophy emphasizes community and interconnectedness",
+          "Emotions may be expressed more indirectly in Rwandan culture"
+        ],
+        "youth_patterns": [
+          {
+            "pattern": "Direct expression of negative emotions is less common among youth compared to adults.",
+            "description": "Youth might express their feelings through indirect means or by internalizing them."
+          },
+          {
+            "pattern": "Use of different emotional vocabulary, sometimes with more subtle language than adult counterparts.",
+            "description": "Emotional expressions may be nuanced and not as overtly expressed as in some other cultures."
+          }
+        ],
+        "appropriateness": "medium"
+      }
+    }
+  },
+  {
+    "text": "I despise people who are cruel to animals.",
+    "true_label": "contempt",
+    "predicted_label": "anger",
+    "confidence": 0.9,
+    "emotions_distribution": {
+      "joy": 0.0,
+      "sadness": 0.1,
+      "anger": 0.9,
+      "fear": 0.0,
+      "disgust": 0.0,
+      "surprise": 0.0,
+      "trust": 0.0,
+      "anticipation": 0.0,
+      "anxiety": 0.0,
+      "contempt": 0.0
+    },
+    "full_response": {
+      "emotion": "anger",
+      "confidence": 0.9,
+      "reasoning": "The user expresses strong negative emotions towards cruelty to animals, indicating intense anger and possibly sadness due to the injustice of such behavior.",
+      "keywords": [
+        "despise",
+        "cruel",
+        "Ubuntu philosophy emphasizes community and interconnectedness",
+        "Emotions may be expressed more indirectly in Rwandan culture"
+      ],
+      "intensity": "high",
+      "emotions": {
+        "joy": 0.0,
+        "sadness": 0.1,
+        "anger": 0.9,
+        "fear": 0.0,
+        "disgust": 0.0,
+        "surprise": 0.0,
+        "trust": 0.0,
+        "anticipation": 0.0,
+        "anxiety": 0.0,
+        "contempt": 0.0
+      },
+      "cultural_context": {
+        "language": "en",
+        "cultural_indicators": [
+          "Ubuntu philosophy emphasizes community and interconnectedness",
+          "Emotions may be expressed more indirectly in Rwandan culture"
+        ],
+        "youth_patterns": [],
+        "appropriateness": "medium"
+      }
+    }
+  }
+]

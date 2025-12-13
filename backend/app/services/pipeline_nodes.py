@@ -11,7 +11,19 @@ import time
 import logging
 import json
 
-from langchain_core.messages import HumanMessage, SystemMessage
+try:
+    from langchain_core.messages import HumanMessage, SystemMessage
+except (ImportError, BaseException):
+    # Fallback classes if langchain is not available or broken
+    class HumanMessage:
+        def __init__(self, content):
+            self.content = content
+            self.type = "human"
+            
+    class SystemMessage:
+        def __init__(self, content):
+            self.content = content
+            self.type = "system"
 from sqlalchemy.orm import Session
 from fastapi import BackgroundTasks
 
@@ -446,15 +458,37 @@ class CrisisDetectionNode(BasePipelineNode):
             if not response_data:
                 raise Exception("LLM call for crisis detection failed to return data.")
 
-            # Parse response and create crisis assessment
-            logger.info(f"🔍 Parsing crisis detection response: {response_data}")
-            crisis_assessment = CrisisAssessment(
-                is_crisis=response_data.is_crisis,
-                crisis_confidence=response_data.crisis_confidence,
-                crisis_keywords=response_data.crisis_keywords,
-                crisis_reason=response_data.crisis_reason,
-                crisis_severity=CrisisSeverity(response_data.crisis_severity.strip().split(' ')[0])
-            )
+            # Check if response is structured or raw text
+            if hasattr(response_data, 'is_crisis') and hasattr(response_data, 'crisis_confidence'):
+                # Structured output was successful
+                logger.info(f"🔍 Parsing crisis detection response: {response_data}")
+                
+                # Handle case-insensitive severity parsing
+                severity_str = response_data.crisis_severity.strip().split(' ')[0].lower()
+                try:
+                    crisis_severity = CrisisSeverity(severity_str)
+                except ValueError:
+                    # Fallback for invalid severity values
+                    logger.warning(f"⚠️  Invalid crisis severity '{severity_str}', defaulting to 'none'")
+                    crisis_severity = CrisisSeverity.NONE
+                
+                crisis_assessment = CrisisAssessment(
+                    is_crisis=response_data.is_crisis,
+                    crisis_confidence=response_data.crisis_confidence,
+                    crisis_keywords=response_data.crisis_keywords,
+                    crisis_reason=response_data.crisis_reason,
+                    crisis_severity=crisis_severity
+                )
+            else:
+                # Structured output failed, create fallback assessment
+                logger.warning(f"⚠️  Structured output failed for crisis detection, using fallback assessment. Response type: {type(response_data)}")
+                crisis_assessment = CrisisAssessment(
+                    is_crisis=False,
+                    crisis_confidence=0.0,
+                    crisis_keywords=[],
+                    crisis_reason="Fallback assessment due to structured output failure",
+                    crisis_severity=CrisisSeverity.NONE
+                )
             logger.info(f"🚨 Classified Crisis: {crisis_assessment}")
             state["crisis_assessment"] = crisis_assessment
             
@@ -1042,7 +1076,7 @@ class CrisisAlertNode(BasePipelineNode):
             background = state.get("background")
 
             # Use crisis_classifier to extract crisis information
-            crisis_result = classify_crisis(query)
+            crisis_result = await classify_crisis(query)
 
             # Log crisis and notify therapists if we have the required parameters
             if db and background and user_id and conversation_id and message_id:
@@ -1053,7 +1087,7 @@ class CrisisAlertNode(BasePipelineNode):
                     conversation_id=conversation_id,
                     message_id=message_id,
                     text=query,
-                    crisis_result=dict(crisis_result),  # Convert CrisisResult to dict
+                    crisis_result=crisis_result,  # Already a dict from async classify_crisis
                     classifier_model=os.getenv("MODEL_NAME", ""),  # from crisis_classifier.py
                     classifier_version="1.0"
                 )

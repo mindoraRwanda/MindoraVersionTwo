@@ -119,7 +119,8 @@ async def send_message(
         bot_reply = pipeline_result.get("response", "I'm here to support you.")
         response_confidence = pipeline_result.get("response_confidence", 0.0)
         processing_metadata = pipeline_result.get("processing_metadata", [])
-
+        if bot_reply == "":
+            bot_reply = "Sorry, I am was not created to handle issues like this."
         workflow_time = time.time() - workflow_start
         print(f"⏱️  Stateful pipeline processing: {workflow_time:.3f}s ({len(bot_reply)} chars)")
         print(f"🤖 Response confidence: {response_confidence:.2f}")

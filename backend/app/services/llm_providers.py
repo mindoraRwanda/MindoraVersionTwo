@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import List, Dict, Any, Optional, Union, Type
+from typing import List, Dict, Any, Optional, Union, Type, TYPE_CHECKING
 import os
 import requests
 import asyncio
@@ -7,15 +7,20 @@ from ..settings.settings import settings
 from pydantic import BaseModel
 import logging
 
+if TYPE_CHECKING:
+    from pydantic import BaseModel
+
 logger = logging.getLogger(__name__)
 
 try:
 
     from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage, AIMessage
     from pydantic import BaseModel
-    from langchain_community.llms import HuggingFacePipeline # Added for HuggingFaceProvider
-except ImportError:
-    # Fallback for type hints if langchain is not available
+    from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage, AIMessage
+    from pydantic import BaseModel
+    # from langchain_community.llms import HuggingFacePipeline # Removed to avoid potential conflicts
+except (ImportError, BaseException):
+    # Fallback for type hints if langchain is not available or broken
     BaseMessage = Any
     HumanMessage = Any
     SystemMessage = Any
@@ -123,17 +128,17 @@ class ChatOllamaProvider(LLMProvider):
                 # Use the compatibility layer for gradual migration
                 model_temperature = settings.model.temperature if settings.model else 0.85
                 self._chat_model = ChatOllama(
-                    base_url=self.base_url,
                     model=self.model_name,
-                    temperature=model_temperature,
-                    **{k: v for k, v in self.kwargs.items() if k not in ['base_url']}
+                    base_url=self.base_url,
+                    temperature=model_temperature
                 )
                 print(f"✅ Ollama chat model created: {self.model_name}")
-            except ImportError:
-                raise RuntimeError("langchain_ollama not installed. Install with: pip install langchain_ollama")
+            except (ImportError, BaseException) as e:
+                print(f"⚠️  Failed to initialize ChatOllama ({e}). Using HTTP fallback.")
+                self._chat_model = None
 
         # Use structured output if requested
-        if structured_output:
+        if structured_output and self._chat_model:
             try:
                 structured_model = self._chat_model.with_structured_output(structured_output)
                 response = await structured_model.ainvoke(messages)
@@ -142,8 +147,125 @@ class ChatOllamaProvider(LLMProvider):
                 print(f"Warning: Structured output failed for Ollama, falling back to text: {e}")
                 # Fall back to regular generation
         
-        response = await self._chat_model.ainvoke(messages)
-        return self._extract_content(response, structured_output)
+        if self._chat_model:
+            try:
+                response = await self._chat_model.ainvoke(messages)
+                content = self._extract_content(response)
+            except Exception as e:
+                print(f"❌ ChatOllama invocation failed: {e}. Trying HTTP fallback.")
+                content = await self._generate_http(messages, structured_output)
+        else:
+            content = await self._generate_http(messages, structured_output)
+        
+        # If we need structured output but fell back to text, try to parse JSON manually
+        if structured_output and isinstance(content, str):
+            try:
+                import json
+                import re
+                
+                # Try to find JSON in the text
+                json_str = content
+                match = re.search(r"\{.*\}", content, re.DOTALL)
+                if match:
+                    json_str = match.group(0)
+                
+                parsed_json = json.loads(json_str)
+                
+                # If structured_output is a Pydantic model, instantiate it
+                if isinstance(structured_output, type) and issubclass(structured_output, BaseModel):
+                    return structured_output(**parsed_json)
+                elif isinstance(structured_output, dict):
+                    return parsed_json
+                
+            except Exception as parse_error:
+                print(f"Warning: Manual JSON parsing failed: {parse_error}")
+                
+        return content
+
+    async def _generate_http(self, messages: List[Any], structured_output: Optional[Union[Type[BaseModel], Dict[str, Any]]] = None) -> str:
+        """Generate response using direct HTTP request to Ollama."""
+        import json
+        
+        # Convert messages to Ollama format
+        ollama_messages = []
+        for msg in messages:
+            role = "user"
+            content = ""
+            if hasattr(msg, "content"):
+                content = msg.content
+                if hasattr(msg, "type"):
+                    if msg.type == "system": role = "system"
+                    elif msg.type == "ai": role = "assistant"
+            elif isinstance(msg, dict):
+                content = msg.get("content", "")
+                role = msg.get("role", "user")
+            
+            ollama_messages.append({"role": role, "content": content})
+        
+        # Add JSON formatting instruction if structured output is requested
+        if structured_output:
+            json_instruction = "\n\nIMPORTANT: Return your response ONLY as valid JSON with no additional text or formatting. Do not include explanations, headers, or any text before or after the JSON."
+            if isinstance(structured_output, type) and issubclass(structured_output, BaseModel):
+                # Get the fields from the Pydantic model to provide better instructions
+                import inspect
+                fields = inspect.signature(structured_output.__init__).parameters
+                field_info = []
+                for name, param in fields.items():
+                    if name != 'self' and param.annotation:
+                        field_type = param.annotation.__name__ if hasattr(param.annotation, '__name__') else str(param.annotation)
+                        field_info.append(f'"{name}": <{field_type}>')
+                json_instruction += f"\n\nRequired fields: {', '.join(field_info)}"
+            
+            # Add the instruction to the last user message
+            if ollama_messages:
+                ollama_messages[-1]["content"] += json_instruction
+            
+        payload = {
+            "model": self.model_name,
+            "messages": ollama_messages,
+            "stream": False,
+            "options": {
+                "temperature": self.kwargs.get("temperature", 0.7)
+            }
+        }
+        
+        loop = asyncio.get_event_loop()
+        
+        def _do_request():
+            try:
+                resp = requests.post(f"{self.base_url}/api/chat", json=payload, timeout=60)
+                resp.raise_for_status()
+                return resp.json().get("message", {}).get("content", "")
+            except Exception as e:
+                print(f"❌ Ollama HTTP request failed: {e}")
+                return ""
+                
+        return await loop.run_in_executor(None, _do_request)
+        
+        # If we need structured output but fell back to text, try to parse JSON manually
+        if structured_output and isinstance(content, str):
+            try:
+                import json
+                import re
+                
+                # Try to find JSON in the text
+                json_str = content
+                match = re.search(r"\{.*\}", content, re.DOTALL)
+                if match:
+                    json_str = match.group(0)
+                
+                parsed_json = json.loads(json_str)
+                
+                # If structured_output is a Pydantic model, instantiate it
+                if isinstance(structured_output, type) and issubclass(structured_output, BaseModel):
+                    return structured_output(**parsed_json)
+                elif isinstance(structured_output, dict):
+                    return parsed_json
+                
+            except Exception as parse_error:
+                print(f"Warning: Manual JSON parsing failed: {parse_error}")
+                
+        return content
 
 
 class ChatOpenAIProvider(LLMProvider):

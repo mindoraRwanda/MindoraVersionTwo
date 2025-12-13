@@ -1,0 +1,202 @@
+[
+    {
+        "text": "I finally got the promotion I've been working so hard for!",
+        "label": "joy"
+    },
+    {
+        "text": "The sunrise this morning was absolutely breathtaking.",
+        "label": "joy"
+    },
+    {
+        "text": "I'm so happy to see my family again after so long.",
+        "label": "joy"
+    },
+    {
+        "text": "This birthday surprise is the best thing ever!",
+        "label": "joy"
+    },
+    {
+        "text": "I feel great about finishing this project on time.",
+        "label": "joy"
+    },
+    {
+        "text": "I feel so empty and alone since she left.",
+        "label": "sadness"
+    },
+    {
+        "text": "It breaks my heart to see him suffering like this.",
+        "label": "sadness"
+    },
+    {
+        "text": "I missed the opportunity and now it's gone forever.",
+        "label": "sadness"
+    },
+    {
+        "text": "The news of the accident was devastating.",
+        "label": "sadness"
+    },
+    {
+        "text": "I just want to curl up in bed and cry all day.",
+        "label": "sadness"
+    },
+    {
+        "text": "How dare they treat me with such disrespect!",
+        "label": "anger"
+    },
+    {
+        "text": "I am absolutely furious about the billing error.",
+        "label": "anger"
+    },
+    {
+        "text": "Stop interrupting me when I'm speaking!",
+        "label": "anger"
+    },
+    {
+        "text": "It makes me so mad when people cut in line.",
+        "label": "anger"
+    },
+    {
+        "text": "I can't believe he lied to my face like that.",
+        "label": "anger"
+    },
+    {
+        "text": "I'm terrified of what might happen if I fail.",
+        "label": "fear"
+    },
+    {
+        "text": "The sound of footsteps behind me made me freeze.",
+        "label": "fear"
+    },
+    {
+        "text": "I'm scared that I won't be able to pay the rent.",
+        "label": "fear"
+    },
+    {
+        "text": "The thought of public speaking gives me panic attacks.",
+        "label": "fear"
+    },
+    {
+        "text": "I have a bad feeling about this dark alley.",
+        "label": "fear"
+    },
+    {
+        "text": "That smell coming from the fridge is revolting.",
+        "label": "disgust"
+    },
+    {
+        "text": "I can't stand the sight of cockroaches.",
+        "label": "disgust"
+    },
+    {
+        "text": "His behavior at the dinner table was repulsive.",
+        "label": "disgust"
+    },
+    {
+        "text": "The food was spoiled and made me sick.",
+        "label": "disgust"
+    },
+    {
+        "text": "I am disgusted by their lack of empathy.",
+        "label": "disgust"
+    },
+    {
+        "text": "I wasn't expecting a package today!",
+        "label": "surprise"
+    },
+    {
+        "text": "Wow, I didn't know you could play the piano.",
+        "label": "surprise"
+    },
+    {
+        "text": "It was a shock to hear they are moving away.",
+        "label": "surprise"
+    },
+    {
+        "text": "I'm amazed by how quickly the kids have grown.",
+        "label": "surprise"
+    },
+    {
+        "text": "Whoa, that car came out of nowhere!",
+        "label": "surprise"
+    },
+    {
+        "text": "I know I can count on you to keep my secret.",
+        "label": "trust"
+    },
+    {
+        "text": "She has always been a reliable friend.",
+        "label": "trust"
+    },
+    {
+        "text": "I believe in his ability to lead the team.",
+        "label": "trust"
+    },
+    {
+        "text": "I feel safe telling you my problems.",
+        "label": "trust"
+    },
+    {
+        "text": "We trust the process will yield good results.",
+        "label": "trust"
+    },
+    {
+        "text": "I can't wait for the concert next week!",
+        "label": "anticipation"
+    },
+    {
+        "text": "I'm looking forward to starting my new job.",
+        "label": "anticipation"
+    },
+    {
+        "text": "The suspense is killing me, tell me the news!",
+        "label": "anticipation"
+    },
+    {
+        "text": "I'm eager to see how the movie ends.",
+        "label": "anticipation"
+    },
+    {
+        "text": "Counting down the days until vacation.",
+        "label": "anticipation"
+    },
+    {
+        "text": "I'm really nervous about the exam tomorrow.",
+        "label": "anxiety"
+    },
+    {
+        "text": "My heart races whenever I think about the deadline.",
+        "label": "anxiety"
+    },
+    {
+        "text": "I can't stop worrying about the future.",
+        "label": "anxiety"
+    },
+    {
+        "text": "I feel a constant knot in my stomach.",
+        "label": "anxiety"
+    },
+    {
+        "text": "What if everything goes wrong?",
+        "label": "anxiety"
+    },
+    {
+        "text": "He thinks he's better than everyone else.",
+        "label": "contempt"
+    },
+    {
+        "text": "I have nothing but disdain for liars.",
+        "label": "contempt"
+    },
+    {
+        "text": "She looked at him with a sneer of contempt.",
+        "label": "contempt"
+    },
+    {
+        "text": "They mocked our efforts to help.",
+        "label": "contempt"
+    },
+    {
+        "text": "I despise people who are cruel to animals.",
+        "label": "contempt"
+    }
+]

@@ -3,10 +3,13 @@
 import os
 import json
 import re
-from typing import Literal, TypedDict, Dict, Any
-from groq import Groq
+import logging
+from typing import Literal, TypedDict, Dict, Any, Optional
+from .llm_providers import create_llm_provider
 
 from datetime import datetime
+
+logger = logging.getLogger(__name__)
 
 CrisisLabel = Literal[
     "self_harm", "suicide_ideation", "self_injury",
@@ -20,11 +23,10 @@ class CrisisResult(TypedDict, total=False):
     confidence: float
     rationale: str
 
-MODEL = os.getenv("CRISIS_MODEL", "llama-3.1-8b-instant")  # safer default than legacy llama3-8b-8192
-
 SYSTEM_PROMPT = """You are a safety classifier for a mental-health chatbot.
 Return STRICT JSON with keys: label, severity, confidence, rationale.
-label ∈ {self_harm, suicide_ideation, self_injury, substance_abuse, violence, medical_emergency, other, none}
+label ∈ {"self_harm", "suicide_ideation", "self_injury",
+    "substance_abuse", "violence", "medical_emergency", "other", "none"}
 severity ∈ {low, moderate, high, imminent} (if label is 'none' use 'low')
 confidence ∈ [0,1]
 Respond ONLY with JSON.
@@ -54,24 +56,50 @@ def _safe_json_extract(raw: str) -> Dict[str, Any]:
             return json.loads(m.group(0))
         except Exception:
             pass
+    # Try to clean markdown code blocks
+    try:
+        if "```json" in raw:
+            clean = raw.split("```json")[1].split("```")[0].strip()
+            return json.loads(clean)
+        elif "```" in raw:
+            clean = raw.split("```")[1].split("```")[0].strip()
+            return json.loads(clean)
+    except Exception:
+        pass
+        
     return {}
 
-def classify_crisis(text: str) -> CrisisResult:
-    client = Groq(api_key=os.getenv("GROQ_API_KEY"))
+async def classify_crisis(text: str, provider_name: Optional[str] = None, model_name: Optional[str] = None) -> CrisisResult:
     try:
-        # Avoid response_format to sidestep 400s on some models;
-        # enforce JSON via prompt and parse defensively.
-        completion = client.chat.completions.create(
-            model=MODEL,
-            temperature=0,
-            messages=[
-                {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": USER_TEMPLATE.format(text=text[:4000])},
-            ],
-        )
-        raw = completion.choices[0].message.content  # attribute access is correct for Groq SDK
+        # Import settings to get configuration
+        from ..settings.settings import settings
+        
+        # Use settings configuration if not explicitly provided
+        if provider_name is None:
+            provider_name = settings.model.llm_provider if settings.model else None
+        if model_name is None:
+            model_name = settings.model.model_name if settings.model else "gemma3:1b"
+            
+        # Create provider using settings configuration
+        llm_provider = create_llm_provider(provider=provider_name, model=model_name)
+        
+        try:
+            from langchain_core.messages import SystemMessage, HumanMessage
+        except (ImportError, BaseException):
+            class SystemMessage:
+                def __init__(self, content): self.content = content
+            class HumanMessage:
+                def __init__(self, content): self.content = content
+        
+        messages = [
+            SystemMessage(content=SYSTEM_PROMPT),
+            HumanMessage(content=USER_TEMPLATE.format(text=text[:4000])),
+        ]
+        
+        raw = await llm_provider.generate_response(messages)
         data = _safe_json_extract(raw)
     except Exception as e:
+        logger.error(f"Crisis classification failed: {e}")
         return {"label": "other", "severity": "low", "confidence": 0.0, "rationale": f"llm_error:{e}"}
 
     # Normalize and validate

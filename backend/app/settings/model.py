@@ -5,21 +5,36 @@ from .base import BaseAppSettings
 
 class ModelSettings(BaseAppSettings):
     """Configuration for LLM model settings."""
-    
+
     # Core model configuration - maps to MODEL_NAME in env
     model_name: str = "gemma3:1b"  # Changed from default_model_name
-    
+
     # Provider URLs - maps to OLLAMA_BASE_URL in env
     ollama_base_url: str = "http://localhost:11434"
     vllm_base_url: str = "http://localhost:8001/v1"
-    
+
     # Model parameters - maps to TEMPERATURE, MAX_TOKENS in env
     temperature: float = 0.6
     max_tokens: int = 500
     
+    # LLM provider for general use (when using query engines)
+    llm_provider: str = "groq"  # ollama, openai, groq, huggingface, etc.
+
     # API Keys (secrets) - maps to OPENAI_API_KEY, GROQ_API_KEY in env
     openai_api_key: Optional[str] = None
     groq_api_key: Optional[str] = None
+
+    # LlamaIndex specific settings
+    # Embedding model configuration
+    embedding_model_name: str = "all-MiniLM-L6-v2"
+    embedding_model_provider: str = "huggingface"  # huggingface, openai, etc.
+    
+    # LLM provider for LlamaIndex (when using query engines)
+    llamaindex_llm_provider: str = "ollama"  # ollama, openai, groq, etc.
+    llamaindex_model_name: str = "gemma3:1b"
+
+    # Embedding API keys (if using OpenAI embeddings)
+    openai_embedding_api_key: Optional[str] = None
     
     @field_validator('temperature')
     @classmethod

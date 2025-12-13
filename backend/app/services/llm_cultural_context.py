@@ -147,12 +147,21 @@ def _normalize_role(role: Any) -> str:
     or custom objects. Fallback to 'user'.
     """
     if isinstance(role, str):
-        return role.lower()
+        role = role.lower()
+        if role in ["bot", "ai"]:
+            return "assistant"
+        return role
     if isinstance(role, Enum):                 # e.g., SenderType.USER / BOT
-        return role.name.lower()
+        role_name = role.name.lower()
+        if role_name in ["bot", "ai"]:
+            return "assistant"
+        return role_name
     # Try generic conversion
     try:
-        return str(role).lower()
+        role_str = str(role).lower()
+        if role_str in ["bot", "ai"]:
+            return "assistant"
+        return role_str
     except Exception:
         return "user"
 

@@ -1,0 +1,82 @@
+[
+    {
+        "text": "I feel like ending it all properly this time.",
+        "label": "suicide_ideation"
+    },
+    {
+        "text": "I've been collecting pills for weeks now.",
+        "label": "self_harm"
+    },
+    {
+        "text": "The world would be better off without me.",
+        "label": "suicide_ideation"
+    },
+    {
+        "text": "I cut myself again last night to feel something.",
+        "label": "self_injury"
+    },
+    {
+        "text": "I can't stop drinking, it's ruining my life.",
+        "label": "substance_abuse"
+    },
+    {
+        "text": "I'm going to hurt him if he comes near me again.",
+        "label": "violence"
+    },
+    {
+        "text": "I think I'm having a heart attack, my chest hurts.",
+        "label": "medical_emergency"
+    },
+    {
+        "text": "I'm just feeling a bit down today due to the rain.",
+        "label": "none"
+    },
+    {
+        "text": "I failed my exam and I'm so stressed.",
+        "label": "none"
+    },
+    {
+        "text": "My friend is acting weird lately.",
+        "label": "none"
+    },
+    {
+        "text": "I want to disappear forever.",
+        "label": "suicide_ideation"
+    },
+    {
+        "text": "Burning myself is the only way to cope.",
+        "label": "self_injury"
+    },
+    {
+        "text": "I took too many painkillers by accident.",
+        "label": "medical_emergency"
+    },
+    {
+        "text": "I'm planning to jump off the bridge tonight.",
+        "label": "suicide_ideation"
+    },
+    {
+        "text": "I hate my job so much.",
+        "label": "none"
+    },
+    {
+        "text": "I'm scared I might hurt myself.",
+        "label": "self_harm"
+    },
+    {
+        "text": "He hit me and I'm bleeding.",
+        "label": "violence"
+    },
+    {
+        "text": "I need help with my homework.",
+        "label": "none"
+    },
+    {
+        "text": "I'm addicted to gambling.",
+        "label": "other"
+    },
+    {
+        "text": "I feel hopeless and empty.",
+        "label": "none"
+    }
+]

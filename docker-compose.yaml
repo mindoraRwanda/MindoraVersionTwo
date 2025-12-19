@@ -27,10 +27,12 @@ services:
     volumes:
       - qdrant_data:/qdrant/storage
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:6333/health"]
+      test:
+        ["CMD-SHELL", "timeout 1 bash -c '</dev/tcp/localhost/6333' || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 5
+      start_period: 10s
 
   # vllm:
   #   image: vllm/vllm-openai:latest
@@ -68,7 +70,7 @@ services:
       postgres:
         condition: service_healthy
       qdrant:
-        condition: service_healthy
+        condition: service_started
     environment:
       ENVIRONMENT: development
       # Database settings (pydantic reads these case-insensitively)
@@ -92,7 +94,7 @@ services:
         REACT_APP_API_URL: http://localhost:8000
     container_name: mindora_frontend
     ports:
-      - "3000:3000"
+      - "3000:80"
     depends_on:
       - backend
 

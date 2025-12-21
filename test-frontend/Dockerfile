@@ -1,5 +1,5 @@
-# Use an official Node.js runtime as base image
-FROM node:18
+# Build stage
+FROM node:18 AS builder
 
 WORKDIR /app
 
@@ -9,6 +9,21 @@ RUN npm install
 
 COPY . .
 
-EXPOSE 3000
+# Build the React app with environment variable support
+ARG REACT_APP_API_URL
+ENV REACT_APP_API_URL=$REACT_APP_API_URL
 
-CMD ["npm", "start"]
+RUN npm run build
+
+# Production stage
+FROM nginx:alpine
+
+# Copy built app from builder stage
+COPY --from=builder /app/build /usr/share/nginx/html
+
+# Copy nginx configuration
+COPY nginx.conf /etc/nginx/conf.d/default.conf
+
+EXPOSE 80
+
+CMD ["nginx", "-g", "daemon off;"]

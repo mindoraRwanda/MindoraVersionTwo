@@ -229,7 +229,7 @@ typing_extensions==4.13.0
 tzdata==2025.2
 urllib3==1.26.16
 uvicorn==0.34.0
-uvloop==0.21.0
+uvloop; sys_platform != "win32"
 watchdog==6.0.0
 watchfiles==1.0.4
 wcwidth==0.2.13

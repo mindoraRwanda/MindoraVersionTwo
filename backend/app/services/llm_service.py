@@ -11,7 +11,7 @@ from .llm_cultural_context import (
     ResponseApproachManager,
     ConversationContextManager
 )
-from .llm_providers import LLMProviderFactory, create_llm_provider
+from .llm_providers import LLMProvider, LLMProviderFactory, create_llm_provider
 from .llm_database_operations import DatabaseManager
 from .unified_rag_service import UnifiedRAGService
 
@@ -268,30 +268,27 @@ class LLMService:
             if self.use_vllm:
                 # For vLLM, we still use Ollama provider but with different base URL
                 provider_name = "ollama"
-                base_url = "http://127.0.0.1:8000"  # vLLM default
             else:
-                # Use the specified provider or auto-detect
-                provider_name = self.provider_name or "ollama"
+                provider_name = self.provider_name or os.getenv("PROVIDER")
 
-            # Create LLM provider using factory
-            try:
-                self.llm_provider = LLMProviderFactory.create_provider(
-                    provider_name=provider_name,
-                    model_name=self.model_name
+            self.llm_provider = self._create_provider_with_fallback(provider_name)
+            if not self.llm_provider:
+                self._initialization_error = (
+                    "No available LLM provider was found. "
+                    "Check PROVIDER, OPENAI_API_KEY, GROQ_API_KEY, OLLAMA_BASE_URL, and installed providers."
                 )
-                print(f"✅ LLM provider '{provider_name}' initialized successfully")
-            except Exception as e:
-                self._initialization_error = f"Failed to create LLM provider: {e}"
                 print(f"❌ {self._initialization_error}")
                 return False
 
+            print(f"✅ LLM provider '{self.llm_provider.provider_name}' selected and ready")
+
             # Safety system is always available (no initialization needed)
             if self.llm_provider.is_available():
-                print("✅ Safety system ready (no external dependencies)")
+                print("✅ LLM provider is available")
             else:
-                self._initialization_error = "Provider not available - will use fallback responses"
+                self._initialization_error = "Selected provider is not available"
                 print(f"⚠️  {self._initialization_error}")
-                print(f"   Model '{self.model_name}' not found or server not running")
+                return False
 
             # Test RAG service connection
             if self.rag_service:
@@ -314,6 +311,46 @@ class LLMService:
             print(f"❌ {self._initialization_error}")
             self._is_initialized = False
             return False
+
+    def _create_provider_with_fallback(self, provider_name: Optional[str]) -> Optional[LLMProvider]:
+        """Create an LLM provider and fallback to another available provider if needed."""
+        tried = []
+        candidate_order = []
+
+        if provider_name:
+            provider_name = provider_name.lower()
+            candidate_order.append(provider_name)
+
+        try:
+            available = LLMProviderFactory.get_available_providers()
+        except Exception as e:
+            available = {}
+            print(f"⚠️  Failed to determine available providers: {e}")
+
+        ordered_candidates = [p for p in ["openai", "groq", "ollama", "huggingface"] if p not in candidate_order]
+        candidate_order.extend(ordered_candidates)
+
+        for candidate in candidate_order:
+            if candidate in tried:
+                continue
+            tried.append(candidate)
+            try:
+                provider = LLMProviderFactory.create_provider(
+                    provider_name=candidate,
+                    model_name=self.model_name
+                )
+            except Exception as e:
+                print(f"⚠️  Failed to create provider '{candidate}': {e}")
+                continue
+
+            if provider.is_available():
+                if provider_name and candidate != provider_name:
+                    print(f"⚠️  Configured provider '{provider_name}' is unavailable; falling back to '{candidate}'")
+                return provider
+            else:
+                print(f"⚠️  Provider '{candidate}' is not available")
+
+        return None
 
     @property
     def is_initialized(self) -> bool:

@@ -169,6 +169,42 @@ class TestQueryValidationNode:
         assert result["query_validation"].is_random == True
         assert result["query_validation"].query_type == QueryType.RANDOM
 
+    @pytest.mark.asyncio
+    async def test_query_validation_simple_greeting(self, validation_node):
+        """Test query validation for simple greetings."""
+        state = {
+            "user_query": "hello there",
+            "processing_metadata": [],
+            "processing_steps_completed": [],
+            "llm_calls_made": 0,
+            "errors": []
+        }
+
+        result = await validation_node.execute(state)
+
+        assert result["query_validation"].query_type == QueryType.GREETING
+        assert result["query_validation"].query_confidence == 1.0
+        assert result["query_validation"].query_reason == "Detected simple greeting using heuristic"
+        assert "greeting" in result["query_validation"].query_keywords
+
+    @pytest.mark.asyncio
+    async def test_query_validation_simple_greeting_with_punctuation(self, validation_node):
+        """Test greeting detection with punctuation and friendly text."""
+        state = {
+            "user_query": "hello there!",
+            "processing_metadata": [],
+            "processing_steps_completed": [],
+            "llm_calls_made": 0,
+            "errors": []
+        }
+
+        result = await validation_node.execute(state)
+
+        assert result["query_validation"].query_type == QueryType.GREETING
+        assert result["query_validation"].query_confidence == 1.0
+        assert result["query_validation"].query_reason == "Detected simple greeting using heuristic"
+        assert "greeting" in result["query_validation"].query_keywords
+
 
 class TestCrisisDetectionNode:
     """Test suite for the crisis detection node."""

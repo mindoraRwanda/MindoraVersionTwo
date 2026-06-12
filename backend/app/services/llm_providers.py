@@ -541,19 +541,16 @@ class LLMProviderFactory:
         Raises:
             ValueError: If provider is not supported
         """
-        # Auto-detect provider from environment or use default
+        # Auto-detect provider from environment or use the first available provider
         if not provider_name:
-            if os.getenv("OPENAI_API_KEY"):
-                provider_name = "openai"
-            elif os.getenv("GROQ_API_KEY"):
-                provider_name = "groq"
-            elif os.getenv("OLLAMA_BASE_URL"):
+            available_providers = cls.get_available_providers()
+            for candidate in ["openai", "groq", "ollama", "huggingface"]:
+                if available_providers.get(candidate):
+                    provider_name = candidate
+                    break
+            if not provider_name:
+                # Fall back to Ollama when no other provider is available
                 provider_name = "ollama"
-            elif os.getenv("HUGGINGFACE_MODEL_PATH"):
-                provider_name = "huggingface"
-            else:
-                # Default to ollama if available, otherwise openai if key exists, fallback to huggingface
-                provider_name = "ollama"  # Changed from huggingface to avoid server startup hanging
 
         if provider_name not in cls.PROVIDERS:
             raise ValueError(f"Unsupported provider: {provider_name}. Supported: {list(cls.PROVIDERS.keys())}")

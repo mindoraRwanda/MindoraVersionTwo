@@ -136,11 +136,11 @@ class ServiceContainer:
             ServiceConfig("unified_rag_service", [], required=False)
         )
 
-        # LLM services (depends on RAG)
+        # LLM service — RAG is injected at runtime if available, not a hard dependency
         self.registry.register_service(
             "llm_service",
             lambda: self._create_llm_service(),
-            ServiceConfig("llm_service", ["llm_config", "unified_rag_service"], required=True)
+            ServiceConfig("llm_service", ["llm_config"], required=True)
         )
 
         # Crisis alert service
@@ -152,11 +152,11 @@ class ServiceContainer:
 
 
 
-        # Stateful mental health pipeline
+        # Stateful mental health pipeline — RAG injected at runtime if available
         self.registry.register_service(
             "stateful_pipeline",
             lambda: self._create_stateful_pipeline(),
-            ServiceConfig("stateful_pipeline", ["llm_service", "unified_rag_service"], required=True)
+            ServiceConfig("stateful_pipeline", ["llm_service"], required=True)
         )
 
         # Cultural context
@@ -191,7 +191,16 @@ class ServiceContainer:
 
     def _create_llm_service(self):
         """Create LLM service."""
-        llm_service = LLMService(use_vllm=False, provider_name=os.getenv("PROVIDER"), model_name=os.getenv("MODEL_NAME"))
+        provider  = os.getenv("PROVIDER")
+        model     = os.getenv("MODEL_NAME")
+        groq_key  = os.getenv("GROQ_API_KEY", "")
+        openai_key = os.getenv("OPENAI_API_KEY", "")
+        logger.info(
+            f"🔍 LLM env check — PROVIDER={provider!r}, MODEL_NAME={model!r}, "
+            f"GROQ_KEY={'SET(…'+groq_key[-4:]+')' if len(groq_key) > 4 else 'NOT SET'}, "
+            f"OPENAI_KEY={'SET' if openai_key else 'NOT SET'}"
+        )
+        llm_service = LLMService(use_vllm=False, provider_name=provider, model_name=model)
         
         # Inject RAG service if available
         try:
@@ -409,13 +418,20 @@ class ServiceContainer:
             factory = self.registry._factories[name]
             instance = factory()
 
-            # If the instance has an initialize method, call it (sync or async)
+            # If the instance has an initialize method, call it (sync or async).
+            # LLMService.initialize() returns False on failure — treat that as an error
+            # so dependent services (stateful_pipeline) are not built with a None provider.
             if hasattr(instance, 'initialize'):
                 if asyncio.iscoroutinefunction(instance.initialize):
-                    await instance.initialize()
+                    result = await instance.initialize()
                 else:
-                    # Call synchronous initialize method
-                    instance.initialize()
+                    result = instance.initialize()
+                if result is False:
+                    logger.error(
+                        f"Service '{name}' initialize() returned False — "
+                        "check PROVIDER env var and API key configuration."
+                    )
+                    return False
 
             self.registry._instances[name] = instance
             self.registry._initialized.add(name)
@@ -529,6 +545,15 @@ async def check_service_health() -> Dict[str, Any]:
 
     for name in service_container.registry._factories.keys():
         try:
+            if not service_container.is_initialized(name):
+                required = service_container.registry._configs[name].required
+                health_status[name] = {
+                    "initialized": False,
+                    "healthy": False,
+                    "error": "failed to initialize" + (" (required)" if required else " (optional — skipped)")
+                }
+                continue
+
             instance = service_container.get_service(name)
             is_healthy = True
 
@@ -542,8 +567,11 @@ async def check_service_health() -> Dict[str, Any]:
                 except Exception as e:
                     logger.warning(f"Health check failed for {name}: {e}")
                     is_healthy = False
+            elif instance is None:
+                # Service initialized but returned None (optional, unavailable)
+                is_healthy = False
             else:
-                # If no health check method, assume healthy if initialized
+                # No health_check method — assume healthy if initialized
                 is_healthy = True
 
             health_status[name] = {

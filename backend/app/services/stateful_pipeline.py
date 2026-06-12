@@ -199,8 +199,8 @@ class StatefulMentalHealthPipeline:
             return "end"
         
         if validation.is_random:
-            logger.info(f"🔄 Query marked as random (confidence: {validation.query_confidence:.2f}), ending pipeline")
-            return "end"
+            logger.info(f"🔄 Query marked as random (confidence: {validation.query_confidence:.2f}), routing to generate_response for polite reply")
+            return "generate_response"
 
         if validation.query_type in [QueryType.GREETING, QueryType.CASUAL]:
             logger.info(f"🔄 Query is a {validation.query_type.value}, routing to generate_response")

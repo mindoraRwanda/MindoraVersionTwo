@@ -9,19 +9,19 @@ environment = os.getenv("ENVIRONMENT", "development").lower()
 root_dir = Path(__file__).parent.parent.parent  # Go up three levels from backend/app/main.py
 env_file = root_dir / f".env.{environment}"
 
-# Load environment variables from the environment-specific file
-# Fall back to .env.example if the specific file doesn't exist
+# Load environment variables: environment-specific file → .env → .env.example
+print(f"🔧 ENVIRONMENT={environment!r}, looking for {env_file}")
 if env_file.exists():
     load_dotenv(env_file, override=True)
     print(f"🔧 Loaded environment variables from {env_file}")
+elif (root_dir / ".env").exists():
+    load_dotenv(root_dir / ".env", override=True)
+    print(f"🔧 Loaded environment variables from {root_dir / '.env'}")
+elif (root_dir / ".env.example").exists():
+    load_dotenv(root_dir / ".env.example", override=True)
+    print(f"⚠️ Loaded environment variables from .env.example (placeholder values — create a .env file)")
 else:
-    # Try to load from .env.example as a fallback
-    example_env_file = root_dir / ".env.example"
-    if example_env_file.exists():
-        load_dotenv(example_env_file, override=True)
-        print(f"🔧 Loaded environment variables from {example_env_file} (fallback)")
-    else:
-        print("⚠️ No environment file found, using system environment variables only")
+    print("⚠️ No environment file found, using system environment variables only")
 
 # Initialize the new settings system (lazy-loaded)
 from .settings import settings
@@ -78,31 +78,31 @@ async def startup_event():
     """Initialize services during application startup."""
     print("🚀 Starting up Therapy Chatbot API with service container...")
 
-    try:
-        # Initialize all services using the service container
-        print("🔧 Initializing services...")
-        success = await service_container.initialize_all_services()
-        if not success:
-            print("❌ Failed to initialize services")
-            raise RuntimeError("Service initialization failed")
+    # Initialize all services — never raise here so the app always starts.
+    # If a service fails, the pipeline nodes will return clear error messages
+    # rather than crashing the whole process.
+    print("🔧 Initializing services...")
+    success = await service_container.initialize_all_services()
 
-        # Check service health
-        print("🏥 Checking service health...")
+    # Always run a health check so the logs tell us exactly what failed.
+    print("🏥 Service Health Status:")
+    try:
         health_status = await check_service_health()
-        print("📊 Service Health Status:")
         healthy_count = 0
         for service_name, status in health_status.items():
-            status_icon = "✅" if status["healthy"] else "❌"
-            print(f"  {status_icon} {service_name}")
-            if status["healthy"]:
+            status_icon = "✅" if status.get("healthy") else "❌"
+            error_detail = f" — {status['error']}" if status.get("error") else ""
+            print(f"  {status_icon} {service_name}{error_detail}")
+            if status.get("healthy"):
                 healthy_count += 1
-
-        print(f"✅ {healthy_count}/{len(health_status)} services healthy")
-        print("✅ Application startup complete")
-
+        print(f"{'✅' if success else '⚠️'} {healthy_count}/{len(health_status)} services healthy")
     except Exception as e:
-        print(f"❌ Error during startup: {e}")
-        raise
+        print(f"⚠️ Health check failed: {e}")
+
+    if not success:
+        print("⚠️ Some services failed — app running in degraded mode. Check logs above for details.")
+    else:
+        print("✅ Application startup complete")
 
 # Shutdown event handler
 @app.on_event("shutdown")

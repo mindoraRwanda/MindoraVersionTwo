@@ -129,6 +129,7 @@
 #         return skip_analysis or len(user_message.strip()) < 10
 
 
+import re
 from typing import Dict, List, Any
 from enum import Enum
 
@@ -291,10 +292,24 @@ class ConversationContextManager:
     @staticmethod
     def is_simple_greeting(user_message: str) -> bool:
         simple_greetings = settings.safety.simple_greetings if settings.safety else []
-        return (
-            len(user_message.strip()) < 15
-            and any(g in user_message.lower() for g in simple_greetings)
-        )
+        message = user_message.strip().lower()
+        if not message:
+            return False
+
+        # Keep greetings short to avoid misclassifying longer mental health queries.
+        if len(message) > 40:
+            return False
+
+        normalized = re.sub(r"[^\w\s]", "", message)
+        if normalized in simple_greetings:
+            return True
+
+        # Allow greeting phrases with a short trailing qualifier, e.g. "hello there" or "hey how are you"
+        for greeting in simple_greetings:
+            if normalized.startswith(greeting) and len(normalized) <= len(greeting) + 12:
+                return True
+
+        return False
 
     @staticmethod
     def should_skip_analysis(user_message: str, skip_analysis: bool = False) -> bool:

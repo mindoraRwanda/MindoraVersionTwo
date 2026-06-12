@@ -437,7 +437,9 @@ def create_unified_rag_service() -> UnifiedRAGService:
     """Factory function to create a unified RAG service."""
     try:
         service = UnifiedRAGService()
-        service.initialize(vectorize=False)  # Don't vectorize on startup
+        if not service.initialize(vectorize=False):
+            logger.warning("⚠️ UnifiedRAGService.initialize() failed — Qdrant may not be running")
+            return None
         return service
     except Exception as e:
         logger.error(f"❌ Failed to create unified RAG service: {e}")

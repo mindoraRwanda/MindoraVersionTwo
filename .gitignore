@@ -22,7 +22,6 @@ wheels/
 *.egg
 venv/
 backend/venv/
-.env
 .venv
 pip-log.txt
 pip-delete-this-directory.txt
@@ -38,10 +37,6 @@ test-frontend/.pnp.js
 test-frontend/coverage/
 test-frontend/build/
 test-frontend/.DS_Store
-test-frontend/.env.local
-test-frontend/.env.development.local
-test-frontend/.env.test.local
-test-frontend/.env.production.local
 test-frontend/npm-debug.log*
 test-frontend/yarn-debug.log*
 test-frontend/yarn-error.log*
@@ -74,11 +69,12 @@ temp/
 *.sqlite
 *.sqlite3
 
-# Environment variables
-.env.local
-.env.development
-.env.test
-.env.production
+# Environment files — never commit real secrets
+# All .env variants are ignored; only .env.example is allowed
+.env
+.env.*
+*.env
+!.env.example
 
 # OpenSpec project documentation
 openspec/

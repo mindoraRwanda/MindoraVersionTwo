@@ -11,7 +11,7 @@ import time
 import logging
 import json
 
-from langchain_core.messages import HumanMessage, SystemMessage
+from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
 from sqlalchemy.orm import Session
 from fastapi import BackgroundTasks
 
@@ -28,6 +28,7 @@ from ..prompts.response_approach_prompts import ResponseApproachPrompts
 from .crisis_classifier import classify_crisis
 from .safety_pipeline import log_crisis_and_notify
 from .text_emotion_classifier import TextEmotionClassifier
+from .llm_cultural_context import ConversationContextManager
 from pydantic import BaseModel, Field
 
 
@@ -88,17 +89,53 @@ class BasePipelineNode(ABC):
     async def _call_llm(self, system_prompt: str, user_prompt: str, state: StatefulPipelineState, structured_output: Optional[Any] = None) -> Any:
         """Make LLM call with error handling and optional structured output."""
         try:
+            if self.llm_provider is None:
+                raise RuntimeError(
+                    "LLM provider is not initialized. "
+                    "Check the PROVIDER environment variable and API key settings."
+                )
             logger.info(f"🤖 Making LLM call with {len(system_prompt)} char system prompt, {len(user_prompt)} char user prompt")
             system_message = SystemMessage(content=system_prompt)
             human_message = HumanMessage(content=user_prompt)
-            
+
+            # For response-generation calls (no structured schema), inject the last
+            # few conversation turns so the model can give context-aware replies.
+            # Structured-output calls (classification/analysis) stay as [system, human]
+            # to avoid polluting the JSON schema response.
+            messages: List[Any] = [system_message]
+            if not structured_output:
+                history = state.get("conversation_history") or []
+                for turn in history[-8:]:  # keep last 4 exchanges (8 messages)
+                    role = str(turn.get("role", "user")).lower()
+                    text = (turn.get("text") or turn.get("content") or "").strip()
+                    if not text:
+                        continue
+                    if role in ("bot", "assistant"):
+                        messages.append(AIMessage(content=text))
+                    else:
+                        messages.append(HumanMessage(content=text))
+            messages.append(human_message)
+
             response = await self.llm_provider.agenerate(
-                [system_message, human_message], 
+                messages,
                 structured_output=structured_output
             )
             
             increment_llm_calls(state)
             
+            # Support providers that return JSON strings when structured_output is requested.
+            if structured_output and isinstance(response, str):
+                try:
+                    parsed = json.loads(response)
+                    if isinstance(structured_output, type) and issubclass(structured_output, BaseModel):
+                        response = structured_output(**parsed)
+                    else:
+                        response = parsed
+                    logger.info("✅ LLM call successful, structured output parsed from JSON string.")
+                except Exception as parse_error:
+                    logger.warning(f"⚠️ Structured output parsing failed: {parse_error}")
+                    # Fall through with raw response string if parsing fails.
+
             if structured_output:
                 logger.info(f"✅ LLM call successful, structured output received.")
             else:
@@ -323,6 +360,28 @@ class QueryValidationNode(BasePipelineNode):
         logger.info(f"🔍 Starting query validation for: '{query[:100]}{'...' if len(query) > 100 else ''}'")
         
         try:
+            # Short, simple greetings are handled deterministically, without relying on the LLM classifier.
+            if ConversationContextManager.is_simple_greeting(query):
+                greeting_result = QueryValidationResult(
+                    query_confidence=1.0,
+                    query_keywords=["greeting"],
+                    query_reason="Detected simple greeting using heuristic",
+                    is_random=False,
+                    query_type=QueryType.GREETING
+                )
+                state["query_validation"] = greeting_result
+                processing_time = time.time() - start_time
+                state = add_processing_metadata(
+                    state,
+                    "query_validation",
+                    greeting_result.query_confidence,
+                    greeting_result.query_reason,
+                    greeting_result.query_keywords,
+                    processing_time
+                )
+                logger.info("✅ Query validation shortcut: simple greeting detected")
+                return state
+
             # Get cultural context for validation
             cultural_context = self._get_cultural_context(state)
             language = cultural_context["language"]
@@ -1145,66 +1204,105 @@ class GenerateResponseNode(BasePipelineNode):
             if not state.get("generated_content"):
                 query_validation = state.get("query_validation")
                 query_type = query_validation.query_type if query_validation else QueryType.UNCLEAR
-                gender_addressing = self._get_gender_aware_addressing(state)
-                
-                if query_type == QueryType.GREETING:
-                    # Use natural greeting templates
-                    templates = self.cultural_prompts.get_conversation_template('greeting_responses', language)
-                    if templates:
-                        import random
-                        template = random.choice(templates)
-                        response = template.format(gender_sibling=gender_addressing or 'friend')
-                        state["generated_content"] = response
-                        state["response_confidence"] = 0.9
-                        state["response_reason"] = f"Natural greeting response in {language}"
-                    else:
-                        # Fallback greeting
-                        greetings = {
-                            'en': f"Hey there, {gender_addressing or 'friend'}! Good to see you.",
-                            'rw': f"Muraho, {gender_addressing or 'mugenzi'}! Byiza kubabona.",
-                            'fr': f"Salut, {gender_addressing or 'ami'}! Content de te voir.",
-                            'sw': f"Hujambo, {gender_addressing or 'rafiki'}! Nimefurahi kukuona."
-                        }
-                        state["generated_content"] = greetings.get(language, greetings['en'])
-                        state["response_confidence"] = 0.8
-                        state["response_reason"] = f"Fallback greeting in {language}"
-                        
+
+                # Normalise the query for pattern matching
+                import re as _re
+                query_norm = _re.sub(r"[^\w\s]", "", query.strip().lower())
+
+                QUESTION_GREETINGS = {
+                    "how are you", "how are you doing", "how are you feeling",
+                    "how do you do", "hows it going", "how is it going",
+                    "how r u", "how r you", "how have you been", "how are things",
+                }
+                GRATITUDE_PHRASES = {
+                    "thank you", "thanks", "thank you so much", "many thanks",
+                    "thanks a lot", "thx", "ty", "appreciate it", "much appreciated",
+                    "i appreciate that", "im grateful", "i am grateful", "thank u",
+                }
+                FAREWELL_PHRASES = {
+                    "goodbye", "bye", "see you", "see ya", "take care",
+                    "good night", "good bye", "ttyl", "later", "farewell",
+                    "have a good day", "have a nice day",
+                }
+
+                is_question_greeting = any(phrase in query_norm for phrase in QUESTION_GREETINGS)
+                is_gratitude = any(phrase in query_norm for phrase in GRATITUDE_PHRASES)
+                is_farewell = any(phrase in query_norm for phrase in FAREWELL_PHRASES)
+                is_plain_greeting = (
+                    query_type == QueryType.GREETING
+                    or ConversationContextManager.is_simple_greeting(query)
+                )
+
+                if is_question_greeting:
+                    system_prompt = (
+                        "You are Mindora, a warm and caring mental health support chatbot. "
+                        "The user is asking how you are doing. Reply naturally and warmly in "
+                        "1-2 sentences, then gently invite them to share how they are feeling "
+                        "or what brought them here. Be conversational, not clinical."
+                    )
+                    response = await self._call_llm(system_prompt, query, state)
+                    state["generated_content"] = response
+                    state["response_confidence"] = 0.9
+                    state["response_reason"] = "Question greeting answered"
+
+                elif is_gratitude:
+                    system_prompt = (
+                        "You are Mindora, a warm and caring mental health support chatbot. "
+                        "The user is expressing gratitude. Acknowledge their thanks warmly in "
+                        "1-2 sentences and gently invite them to share anything else on their mind. "
+                        "Be genuine and caring."
+                    )
+                    response = await self._call_llm(system_prompt, query, state)
+                    state["generated_content"] = response
+                    state["response_confidence"] = 0.9
+                    state["response_reason"] = "Gratitude acknowledged"
+
+                elif is_farewell:
+                    system_prompt = (
+                        "You are Mindora, a warm and caring mental health support chatbot. "
+                        "The user is saying goodbye. Respond warmly in 1-2 sentences, wish them "
+                        "well, and remind them you are always here if they need support."
+                    )
+                    response = await self._call_llm(system_prompt, query, state)
+                    state["generated_content"] = response
+                    state["response_confidence"] = 0.9
+                    state["response_reason"] = "Farewell acknowledged"
+
+                elif is_plain_greeting:
+                    system_prompt = (
+                        "You are Mindora, a warm and caring mental health support chatbot. "
+                        "The user has just greeted you. Greet them back warmly in 1-2 sentences "
+                        "and invite them to share how they are feeling or what is on their mind."
+                    )
+                    response = await self._call_llm(system_prompt, query, state)
+                    state["generated_content"] = response
+                    state["response_confidence"] = 0.9
+                    state["response_reason"] = "Greeting responded"
+
                 elif query_type == QueryType.CASUAL:
-                    # Use casual conversation templates
-                    templates = self.cultural_prompts.get_conversation_template('casual_responses', language)
-                    if templates:
-                        import random
-                        template = random.choice(templates)
-                        response = template.format(gender_sibling=gender_addressing or 'friend')
-                        state["generated_content"] = response
-                        state["response_confidence"] = 0.8
-                        state["response_reason"] = f"Natural casual response in {language}"
-                    else:
-                        # Fallback casual
-                        casual_responses = {
-                            'en': f"I hear you, {gender_addressing or 'friend'}. What's on your mind?",
-                            'rw': f"Ndabumva, {gender_addressing or 'mugenzi'}. Ni iki kiri mu mutwe wawe?",
-                            'fr': f"Je t'entends, {gender_addressing or 'ami'}. Qu'est-ce qui te préoccupe?",
-                            'sw': f"Nakusikia, {gender_addressing or 'rafiki'}. Nini kiko aklini mwako?"
-                        }
-                        state["generated_content"] = casual_responses.get(language, casual_responses['en'])
-                        state["response_confidence"] = 0.7
-                        state["response_reason"] = f"Fallback casual response in {language}"
-                        
+                    system_prompt = (
+                        "You are Mindora, a warm and caring mental health support chatbot. "
+                        "Respond naturally to the user's casual message in 1-2 sentences, "
+                        "then gently check in on how they are feeling."
+                    )
+                    response = await self._call_llm(system_prompt, query, state)
+                    state["generated_content"] = response
+                    state["response_confidence"] = 0.8
+                    state["response_reason"] = "Casual response generated"
+
                 else:
-                    # Generate culturally appropriate supportive response for serious topics
-                    cultural_prompt = self._apply_cultural_integration(state, "fallback_response")
-                    
-                    supportive_responses = {
-                        'en': f"I'm here to support you, {gender_addressing or 'friend'}. How can I help you today?",
-                        'rw': f"Ndi hano kugufasha, {gender_addressing or 'mugenzi'}. Ni iki nshobora gukugufasha uyu munsi?",
-                        'fr': f"Je suis là pour vous soutenir, {gender_addressing or 'ami'}. Comment puis-je vous aider aujourd'hui?",
-                        'sw': f"Niko hapa kukusaidia, {gender_addressing or 'rafiki'}. Ninaweza kukusaidia vipi leo?"
-                    }
-                    
-                    state["generated_content"] = supportive_responses.get(language, supportive_responses['en'])
-                    state["response_confidence"] = 0.6
-                    state["response_reason"] = f"Supportive response generated with cultural context for {language}"
+                    # Off-topic or random — acknowledge and gently redirect
+                    system_prompt = (
+                        "You are Mindora, a warm and caring mental health support chatbot. "
+                        "The user sent a message that may not be directly about mental health. "
+                        "Respond briefly and kindly in 1-2 sentences. If it is off-topic, "
+                        "gently let them know you focus on emotional and mental well-being "
+                        "while inviting them to share how they are feeling."
+                    )
+                    response = await self._call_llm(system_prompt, query, state)
+                    state["generated_content"] = response
+                    state["response_confidence"] = 0.7
+                    state["response_reason"] = "Off-topic message handled with polite redirect"
             else:
                 # Validate and enhance existing content with cultural appropriateness
                 existing_content = state["generated_content"]

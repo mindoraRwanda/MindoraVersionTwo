@@ -45,20 +45,28 @@ class TextEmotionClassifier:
     def _initialize_model(self):
         """Initialize the HuggingFace emotion model."""
         try:
-            # Using a model fine-tuned for emotion detection
+            from transformers import AutoModelForSequenceClassification, AutoTokenizer
             model_name = "j-hartmann/emotion-english-distilroberta-base"
             device = 0 if torch.cuda.is_available() else -1
-            
+
+            # Load tokenizer and model explicitly requesting safetensors format.
+            # This avoids the torch.load CVE-2025-32434 restriction on .bin files
+            # and downloads the safetensors variant if it isn't cached yet.
+            tokenizer = AutoTokenizer.from_pretrained(model_name)
+            model = AutoModelForSequenceClassification.from_pretrained(
+                model_name,
+                use_safetensors=True,
+            )
             self.classifier = pipeline(
-                "text-classification", 
-                model=model_name, 
-                top_k=None,  # Return all scores
-                device=device
+                "text-classification",
+                model=model,
+                tokenizer=tokenizer,
+                top_k=None,
+                device=device,
             )
             logger.info(f"Emotion classifier initialized on device {device}")
         except Exception as e:
             logger.error(f"Failed to initialize emotion model: {e}")
-            # Fallback or handle error appropriately
             self.classifier = None
 
     def detect_emotion(self, text: str) -> Dict[str, any]:

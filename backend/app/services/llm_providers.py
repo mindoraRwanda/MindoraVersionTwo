@@ -47,6 +47,11 @@ class LLMProvider(ABC):
         """Alias for generate_response for compatibility with pipeline nodes."""
         return await self.generate_response(messages, structured_output)
 
+    async def astream_text(self, messages: List[Any]):
+        """Stream response tokens as an async generator. Default: yields full response as one chunk."""
+        response = await self.generate_response(messages)
+        yield str(response)
+
     @abstractmethod
     def is_available(self) -> bool:
         """Check if the provider is available and properly configured."""
@@ -172,10 +177,12 @@ class ChatOpenAIProvider(LLMProvider):
 
                 # Use the compatibility layer for gradual migration
                 model_temperature = settings.model.temperature if settings.model else 1.0
+                model_max_tokens = settings.model.max_tokens if settings.model else 1200
                 self._chat_model = ChatOpenAI(
                     model=self.model_name,
                     api_key=self.api_key,
                     temperature=model_temperature,
+                    max_tokens=model_max_tokens,
                     **{k: v for k, v in self.kwargs.items() if k not in ['api_key']}
                 )
             except ImportError:
@@ -193,6 +200,24 @@ class ChatOpenAIProvider(LLMProvider):
 
         response = await self._chat_model.ainvoke(messages)
         return self._extract_content(response, structured_output)
+
+    async def astream_text(self, messages: List[Any]):
+        """Stream tokens from OpenAI via LangChain .astream()."""
+        if not self._chat_model:
+            from langchain_openai import ChatOpenAI
+            if not self.api_key:
+                raise RuntimeError("OpenAI API key not configured. Set OPENAI_API_KEY environment variable.")
+            model_temperature = settings.model.temperature if settings.model else 1.0
+            model_max_tokens = settings.model.max_tokens if settings.model else 1200
+            self._chat_model = ChatOpenAI(
+                model=self.model_name,
+                api_key=self.api_key,
+                temperature=model_temperature,
+                max_tokens=model_max_tokens,
+            )
+        async for chunk in self._chat_model.astream(messages):
+            if hasattr(chunk, 'content') and chunk.content:
+                yield chunk.content
 
 
 class ChatGroqProvider(LLMProvider):
@@ -221,10 +246,12 @@ class ChatGroqProvider(LLMProvider):
 
                 # Use the compatibility layer for gradual migration
                 model_temperature = settings.model.temperature if settings.model else 1.0
+                model_max_tokens = settings.model.max_tokens if settings.model else 1200
                 self._chat_model = ChatGroq(
                     model=self.model_name,
                     api_key=self.api_key,
                     temperature=model_temperature,
+                    max_tokens=model_max_tokens,
                     **{k: v for k, v in self.kwargs.items() if k not in ['api_key']}
                 )
             except ImportError:
@@ -242,6 +269,24 @@ class ChatGroqProvider(LLMProvider):
 
         response = await self._chat_model.ainvoke(messages)
         return self._extract_content(response, structured_output)
+
+    async def astream_text(self, messages: List[Any]):
+        """Stream tokens from Groq via LangChain .astream()."""
+        if not self._chat_model:
+            from langchain_groq import ChatGroq
+            if not self.api_key:
+                raise RuntimeError("Groq API key not configured. Set GROQ_API_KEY environment variable.")
+            model_temperature = settings.model.temperature if settings.model else 1.0
+            model_max_tokens = settings.model.max_tokens if settings.model else 1200
+            self._chat_model = ChatGroq(
+                model=self.model_name,
+                api_key=self.api_key,
+                temperature=model_temperature,
+                max_tokens=model_max_tokens,
+            )
+        async for chunk in self._chat_model.astream(messages):
+            if hasattr(chunk, 'content') and chunk.content:
+                yield chunk.content
 
 
 class ChatHuggingFaceProvider(LLMProvider):

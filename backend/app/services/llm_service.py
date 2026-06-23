@@ -164,25 +164,9 @@ class LLMService:
         analysis_time = time.time() - analysis_start
         print(f"    📊 LLM: Analysis pipeline: {analysis_time:.3f}s")
 
-        # RAG retrieval (skip for simple greetings)
+        # RAG context comes from the stateful pipeline's RAGEnhancementNode via pipeline state.
+        # Do not duplicate retrieval here — use what the pipeline already retrieved.
         retrieved_text = ""
-        if not ConversationContextManager.is_simple_greeting(user_message):
-            rag_start = time.time()
-            try:
-                if self.rag_service:
-                    rag_top_k = settings.performance.rag_top_k if settings.performance else 3
-                    retrieved_results = self.rag_service.search(query=user_message, top_k=rag_top_k)
-                    retrieved_text = "\n\n".join(
-                        result.get("text", "") for result in retrieved_results if result.get("text")
-                    )
-                    rag_time = time.time() - rag_start
-                    print(f"    🔍 LLM: RAG search: {rag_time:.3f}s ({len(retrieved_results)} chunks)")
-                else:
-                    retrieved_text = ""
-                    print("    ⚠️ LLM: RAG service not available")
-            except Exception as e:
-                print(f"    ❌ LLM: RAG Error: {e}")
-                retrieved_text = ""
 
         # Get conversation history if not provided
         if not conversation_history and user_id:

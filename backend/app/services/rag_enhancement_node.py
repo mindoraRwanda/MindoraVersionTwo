@@ -30,7 +30,7 @@ class RAGEnhancementNode:
         
         # Configuration
         self.max_retrieved_chunks = 5
-        self.min_relevance_score = 0.3
+        self.min_relevance_score = 0.5
         self.max_context_length = 2000  # Max characters for context
         
         self.logger.info("🔍 RAGEnhancementNode initialized")

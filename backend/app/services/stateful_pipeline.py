@@ -23,7 +23,8 @@ from .pipeline_state import (
 from .pipeline_nodes import (
     QueryValidationNode, CrisisDetectionNode, EmotionDetectionNode,
     QueryEvaluationNode, ElaborationNode, EmpathyNode, ClarificationNode,
-    SuggestionNode, GuidanceNode, IdleNode, CrisisAlertNode, GenerateResponseNode
+    SuggestionNode, GuidanceNode, IdleNode, CrisisAlertNode, GenerateResponseNode,
+    UnifiedAnalysisNode,
 )
 from .rag_enhancement_node import RAGEnhancementNode
 from ..settings import settings
@@ -51,19 +52,22 @@ class StatefulMentalHealthPipeline:
         logger.info("📚 Cultural context prompts loaded")
 
         # Initialize node instances
-        logger.info("🏗️  Initializing pipeline nodes...")
+        logger.info("Initializing pipeline nodes...")
+        # Unified analysis replaces QueryValidation + CrisisDetection + QueryEvaluation
+        self.unified_analysis_node = UnifiedAnalysisNode(self.llm_provider)
+        self.emotion_detection_node = EmotionDetectionNode(self.llm_provider)  # local model, no LLM call
+        self.empathy_node = EmpathyNode(self.llm_provider)
+        self.crisis_alert_node = CrisisAlertNode(self.llm_provider)
+        self.generate_response_node = GenerateResponseNode(self.llm_provider)
+        # Legacy nodes kept for fallback but not wired into the main graph
         self.query_validation_node = QueryValidationNode(self.llm_provider)
         self.crisis_detection_node = CrisisDetectionNode(self.llm_provider)
-        self.emotion_detection_node = EmotionDetectionNode(self.llm_provider)
         self.query_evaluation_node = QueryEvaluationNode(self.llm_provider)
         self.elaboration_node = ElaborationNode(self.llm_provider)
-        self.empathy_node = EmpathyNode(self.llm_provider)
         self.clarification_node = ClarificationNode(self.llm_provider)
         self.suggestion_node = SuggestionNode(self.llm_provider)
         self.guidance_node = GuidanceNode(self.llm_provider)
         self.idle_node = IdleNode(self.llm_provider)
-        self.crisis_alert_node = CrisisAlertNode(self.llm_provider)
-        self.generate_response_node = GenerateResponseNode(self.llm_provider)
         
         # Initialize RAG enhancement node if RAG service is available
         if self.rag_service:
@@ -80,212 +84,82 @@ class StatefulMentalHealthPipeline:
         logger.info("✅ StatefulMentalHealthPipeline initialization complete")
         
     def _build_pipeline_graph(self) -> StateGraph:
-        """Build the LangGraph StateGraph with all nodes and routing logic."""
-        logger.info("🏗️  Building LangGraph StateGraph...")
-        
-        # Initialize the graph
+        """
+        Simplified pipeline graph — 2 LLM calls per message (down from 5-6).
+
+        Flow:
+          emotion_detection (local model, no LLM)
+            → unified_analysis  (1 LLM call: query type + crisis check)
+            → [crisis_alert | rag_enhancement → empathy | generate_response]
+            → generate_response → END
+        """
         workflow = StateGraph(StatefulPipelineState)
-        logger.info("📊 StateGraph initialized with StatefulPipelineState")
-        
-        # Add all nodes
-        logger.info("🔗 Adding nodes to workflow...")
-        workflow.add_node("query_validation", self._query_validation_node)
-        workflow.add_node("crisis_detection", self._crisis_detection_node)
+
+        # ── Nodes ──────────────────────────────────────────────────────────────
         workflow.add_node("emotion_detection", self._emotion_detection_node)
-        workflow.add_node("query_evaluation", self._query_evaluation_node)
-        
-        # Add RAG enhancement node if available
+        workflow.add_node("unified_analysis",  self._unified_analysis_node)
+        workflow.add_node("empathy",           self._empathy_node)
+        workflow.add_node("crisis_alert",      self._crisis_alert_node)
+        workflow.add_node("generate_response", self._generate_response_node)
+
         if self.rag_enhancement_node:
             workflow.add_node("rag_enhancement", self._rag_enhancement_node)
-            logger.info("🔍 RAG enhancement node added to workflow")
-        workflow.add_node("elaboration", self._elaboration_node)
-        workflow.add_node("empathy", self._empathy_node)
-        workflow.add_node("clarification", self._clarification_node)
-        workflow.add_node("suggestion", self._suggestion_node)
-        workflow.add_node("guidance", self._guidance_node)
-        workflow.add_node("idle", self._idle_node)
-        workflow.add_node("crisis_alert", self._crisis_alert_node)
-        workflow.add_node("generate_response", self._generate_response_node)
-        logger.info("✅ All 12 nodes added to workflow")
-        
-        # Set entry point
-        workflow.set_entry_point("query_validation")
-        logger.info("🚪 Entry point set to 'query_validation'")
-        
-        # Add conditional routing
-        logger.info("🔀 Adding conditional routing edges...")
-        workflow.add_conditional_edges(
-            "query_validation",
-            self._route_after_validation,
-            {
-                "crisis_detection": "crisis_detection",
-                "generate_response": "generate_response",
-                "end": END
-            }
-        )
-        
-        workflow.add_conditional_edges(
-            "crisis_detection",
-            self._route_after_crisis,
-            {
-                "emotion_detection": "emotion_detection",
-                "crisis_alert": "crisis_alert",
-                "end": END
-            }
-        )
-        
-        workflow.add_conditional_edges(
-            "emotion_detection",
-            self._route_after_emotion,
-            {
-                "query_evaluation": "query_evaluation"
-            }
-        )
-        
-        # Build routing options for query evaluation
-        evaluation_routes = {
-            "elaboration": "elaboration",
-            "empathy": "empathy",
-            "clarification": "clarification",
-            "suggestion": "suggestion",
-            "guidance": "guidance",
-            "idle": "idle"
-        }
-        
-        # Add RAG enhancement route only if available
+
+        # ── Entry & fixed edges ────────────────────────────────────────────────
+        workflow.set_entry_point("emotion_detection")
+        workflow.add_edge("emotion_detection", "unified_analysis")
+
         if self.rag_enhancement_node:
-            evaluation_routes["rag_enhancement"] = "rag_enhancement"
-        
-        workflow.add_conditional_edges(
-            "query_evaluation",
-            self._route_after_evaluation,
-            evaluation_routes
-        )
-        
-        # Add RAG enhancement routing if available
-        if self.rag_enhancement_node:
-            workflow.add_conditional_edges(
-                "rag_enhancement",
-                self._route_after_rag_enhancement,
-                {
-                    "elaboration": "elaboration",
-                    "empathy": "empathy",
-                    "clarification": "clarification",
-                    "suggestion": "suggestion",
-                    "guidance": "guidance",
-                    "idle": "idle"
-                }
-            )
-        logger.info("✅ Conditional routing edges added")
-        
-        # All response nodes lead to generate_response
-        logger.info("🔗 Adding response node edges...")
-        for node in ["elaboration", "empathy", "clarification", "suggestion", "guidance", "idle", "crisis_alert"]:
-            workflow.add_edge(node, "generate_response")
-        
+            workflow.add_edge("rag_enhancement", "empathy")
+
+        workflow.add_edge("empathy",        "generate_response")
+        workflow.add_edge("crisis_alert",   "generate_response")
         workflow.add_edge("generate_response", END)
-        logger.info("✅ All edges added")
-        
-        logger.info("⚡ Compiling workflow...")
-        compiled_workflow = workflow.compile()
-        logger.info("✅ LangGraph workflow compiled successfully")
-        return compiled_workflow
-    
-    def _route_after_validation(self, state: StatefulPipelineState) -> str:
-        """Route after query validation based on results."""
-        validation = state.get("query_validation")
-        if not validation:
-            logger.info("🔄 No validation result found, ending pipeline")
-            return "end"
-        
-        if validation.is_random:
-            logger.info(f"🔄 Query marked as random (confidence: {validation.query_confidence:.2f}), routing to generate_response for polite reply")
-            return "generate_response"
 
-        if validation.query_type in [QueryType.GREETING, QueryType.CASUAL]:
-            logger.info(f"🔄 Query is a {validation.query_type.value}, routing to generate_response")
-            return "generate_response"
-        
-        logger.info(f"✅ Query validated as mental health related (confidence: {validation.query_confidence:.2f}), proceeding to crisis detection")
-        return "crisis_detection"
-    
-    def _route_after_crisis(self, state: StatefulPipelineState) -> str:
-        """Route after crisis detection based on severity."""
-        crisis = state.get("crisis_assessment")
-        if not crisis:
-            logger.info("🔄 No crisis assessment found, proceeding to emotion detection")
-            return "emotion_detection"
-        
-        severity = crisis.crisis_severity
-        confidence = crisis.crisis_confidence
-
-        if crisis.is_crisis:
-            logger.warning(f"🚨 CRISIS DETECTED: {severity.value} (confidence: {confidence:.2f}), routing to crisis alert")
-            return "crisis_alert"
-        
-        logger.info(f"✅ Crisis assessment completed: {severity.value} (confidence: {confidence:.2f}), proceeding to emotion detection")
-        return "emotion_detection"
-    
-    def _route_after_emotion(self, state: StatefulPipelineState) -> str:
-        """Route after emotion detection."""
-        emotion = state.get("emotion_detection")
-        if emotion:
-            logger.info(f"✅ Emotion detection completed: {emotion.selected_emotion} (confidence: {emotion.emotion_confidence:.2f}), proceeding to query evaluation")
-        else:
-            logger.info("🔄 No emotion detection result, proceeding to query evaluation")
-        return "query_evaluation"
-    
-    def _route_after_evaluation(self, state: StatefulPipelineState) -> str:
-        """Route after query evaluation based on strategy."""
-        evaluation = state.get("query_evaluation")
-        if not evaluation:
-            logger.info("🔄 No evaluation found, routing to idle")
-            return "idle"
-        
-        # Route to RAG enhancement first if available
+        # ── Conditional routing after unified_analysis ─────────────────────────
+        routes = {
+            "empathy":          "empathy",
+            "crisis_alert":     "crisis_alert",
+            "generate_response":"generate_response",
+        }
         if self.rag_enhancement_node:
-            logger.info("🔍 Routing to RAG enhancement first")
-            return "rag_enhancement"
-        
-        # Direct routing if no RAG enhancement
-        strategy = evaluation.evaluation_type
-        
-        # Map strategy values to node names
-        strategy_to_node = {
-            "GIVE_EMPATHY": "empathy",
-            "AWAIT_ELABORATION": "elaboration", 
-            "AWAIT_CLARIFICATION": "clarification",
-            "GIVE_SUGGESTION": "suggestion",
-            "GIVE_GUIDANCE": "guidance",
-            "IDLE": "idle"
-        }
-        
-        target_node = strategy_to_node.get(strategy.value, "idle")
-        logger.info(f"🎯 Routing decision: {strategy.value} -> {target_node}")
-        return target_node
+            routes["rag_enhancement"] = "rag_enhancement"
+
+        workflow.add_conditional_edges(
+            "unified_analysis",
+            self._route_after_unified_analysis,
+            routes,
+        )
+
+        logger.info("Pipeline graph built: emotion_detection → unified_analysis → therapy/crisis")
+        return workflow.compile()
     
-    def _route_after_rag_enhancement(self, state: StatefulPipelineState) -> str:
-        """Route after RAG enhancement based on original evaluation strategy."""
-        evaluation = state.get("query_evaluation")
-        if not evaluation:
-            logger.info("🔄 No evaluation found after RAG enhancement, routing to idle")
-            return "idle"
-        
-        strategy = evaluation.evaluation_type
-        
-        # Map strategy values to node names
-        strategy_to_node = {
-            "GIVE_EMPATHY": "empathy",
-            "AWAIT_ELABORATION": "elaboration", 
-            "AWAIT_CLARIFICATION": "clarification",
-            "GIVE_SUGGESTION": "suggestion",
-            "GIVE_GUIDANCE": "guidance",
-            "IDLE": "idle"
-        }
-        
-        target_node = strategy_to_node.get(strategy.value, "idle")
-        logger.info(f"🎯 Post-RAG routing decision: {strategy.value} -> {target_node}")
-        return target_node
+    def _route_after_unified_analysis(self, state: StatefulPipelineState) -> str:
+        """Single routing decision after the unified analysis node."""
+        validation = state.get("query_validation")
+        crisis    = state.get("crisis_assessment")
+
+        # 1. Non-mental-health → quick conversational reply
+        non_therapy = {QueryType.GREETING, QueryType.CASUAL, QueryType.RANDOM}
+        if validation and (validation.is_random or validation.query_type in non_therapy):
+            logger.info(f"Routing to generate_response (type={validation.query_type.value})")
+            return "generate_response"
+
+        # 2. Genuine crisis (explicit suicidal ideation / active self-harm / imminent danger)
+        if crisis and crisis.is_crisis:
+            HIGH = {CrisisSeverity.SEVERE, CrisisSeverity.HIGH}
+            if crisis.crisis_severity in HIGH and crisis.crisis_confidence >= 0.75:
+                logger.warning(
+                    f"Crisis: {crisis.crisis_severity.value} "
+                    f"conf={crisis.crisis_confidence:.2f} → crisis_alert"
+                )
+                return "crisis_alert"
+            logger.info(f"Low/medium crisis signal ({crisis.crisis_severity.value}) → therapy")
+
+        # 3. Everything else → therapy session (with RAG if available)
+        if self.rag_enhancement_node:
+            return "rag_enhancement"
+        return "empathy"
     
     async def process_query(
         self,
@@ -360,6 +234,59 @@ class StatefulMentalHealthPipeline:
             logger.error(f"   📍 Error details: {str(e)}")
             return self._get_fallback_result(query, str(e))
     
+    async def process_query_stream(
+        self,
+        query: str,
+        user_id: Optional[str] = None,
+        conversation_id: Optional[str] = None,
+        message_id: Optional[str] = None,
+        conversation_history: Optional[List[Dict[str, Any]]] = None,
+        user_gender: Optional[str] = None,
+        db: Optional[Session] = None,
+        background: Optional[BackgroundTasks] = None,
+    ):
+        """
+        Like process_query() but streams the final response token by token.
+
+        Yields str tokens as they arrive from the LLM.  After the generator is
+        exhausted, state["generated_content"] contains the full response text
+        (already set by EmpathyNode.execute_stream or the non-streaming fallback).
+
+        The caller is responsible for saving the bot message to the database.
+        """
+        state = create_initial_pipeline_state(
+            query, user_id, conversation_id, message_id,
+            conversation_history, user_gender, db, background
+        )
+
+        # Fast local nodes first (no LLM cost)
+        state = await self.emotion_detection_node.execute(state)
+        # Single LLM call for classification
+        state = await self.unified_analysis_node.execute(state)
+
+        route = self._route_after_unified_analysis(state)
+        logger.info(f"[stream] route → {route}")
+
+        if route == "rag_enhancement" and self.rag_enhancement_node:
+            state = await self.rag_enhancement_node.execute(state)
+            async for token in self.empathy_node.execute_stream(state):
+                yield token
+
+        elif route == "empathy":
+            async for token in self.empathy_node.execute_stream(state):
+                yield token
+
+        elif route == "crisis_alert":
+            state = await self.crisis_alert_node.execute(state)
+            state = await self.generate_response_node.execute(state)
+            full = state.get("generated_content", "I'm here to support you.")
+            yield full
+
+        else:  # generate_response (greetings / off-topic)
+            state = await self.generate_response_node.execute(state)
+            full = state.get("generated_content", "I'm here to support you.")
+            yield full
+
     def _extract_results(self, state: StatefulPipelineState, processing_time: float) -> Dict[str, Any]:
         """Extract and format results from final state."""
         return {
@@ -410,8 +337,13 @@ class StatefulMentalHealthPipeline:
         result = await self.crisis_detection_node.execute(state)
         logger.info("✅ [PIPELINE] Crisis Detection Node completed")
         return result
-    
-    
+
+    async def _unified_analysis_node(self, state: StatefulPipelineState) -> StatefulPipelineState:
+        logger.info("[PIPELINE] Executing Unified Analysis Node")
+        result = await self.unified_analysis_node.execute(state)
+        logger.info("[PIPELINE] Unified Analysis Node completed")
+        return result
+
     async def _emotion_detection_node(self, state: StatefulPipelineState) -> StatefulPipelineState:
         logger.info("😊 [PIPELINE] Executing Emotion Detection Node")
         result = await self.emotion_detection_node.execute(state)

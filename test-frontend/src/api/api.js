@@ -109,6 +109,25 @@ export const sendMessage = async (conversation_id, content) => {
   };
 };
 
+// ---------- Streaming Messages ----------
+/**
+ * Returns a raw fetch Response for SSE streaming.
+ * The caller reads response.body with a ReadableStream reader.
+ * SSE events: { token: string } | { done: true, id: string, timestamp: string }
+ */
+export const streamMessageResponse = async (conversation_id, content) => {
+  const token = localStorage.getItem("token");
+  const response = await fetch(`${API_BASE}/auth/messages/stream`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ conversation_id, content }),
+  });
+  return response;
+};
+
 // ---------- Voice Messages (new) ----------
 /**
  * Upload a recorded audio blob for STT → normal message pipeline.

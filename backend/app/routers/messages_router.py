@@ -1,7 +1,9 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
+from fastapi.responses import StreamingResponse
 import bleach
 import time
 import json
+from collections import defaultdict, deque
 from sqlalchemy.orm import Session
 from typing import List, Dict, Any, Optional
 from ..auth.utils import get_current_user
@@ -9,20 +11,79 @@ from ..settings.settings import settings
 from ..db.database import SessionLocal
 from ..db.models import Conversation, Message, User, EmotionLog
 from ..auth.schemas import MessageCreate, MessageOut, UserOut
-# Removed: unified_conversation_workflow (consolidated into stateful_pipeline)
 from ..services.stateful_pipeline import StatefulMentalHealthPipeline
 
-# Import the new stateful conversation system
 from ..services.session_state_manager import session_manager
 from ..dependencies import get_stateful_pipeline
 
 router = APIRouter(prefix="/auth", tags=["Messages"])
+
+# ── Per-user rate limiter (sliding-window, in-memory) ──────────
+_RATE_WINDOW_SECONDS = 60
+_RATE_MAX_REQUESTS   = 20            # 20 messages per minute per user
+_rate_store: Dict[str, deque] = defaultdict(deque)
+
+def _check_rate_limit(user_id: str) -> None:
+    """Raise 429 if user has exceeded the per-minute message cap."""
+    now = time.time()
+    q = _rate_store[user_id]
+    # Drop timestamps outside the window
+    while q and q[0] < now - _RATE_WINDOW_SECONDS:
+        q.popleft()
+    if len(q) >= _RATE_MAX_REQUESTS:
+        retry_in = int(_RATE_WINDOW_SECONDS - (now - q[0])) + 1
+        raise HTTPException(
+            status_code=429,
+            detail=f"Too many messages. Please wait {retry_in} seconds before sending again.",
+            headers={"Retry-After": str(retry_in)},
+        )
+    q.append(now)
+# ──────────────────────────────────────────────────────────────
 
 # Dependency: get DB session
 def get_db():
     db = SessionLocal()
     try:
         yield db
+    finally:
+        db.close()
+
+
+async def _generate_conversation_title(
+    llm_provider,
+    user_message: str,
+    bot_reply: str,
+    conversation_id: int,
+) -> None:
+    """Generate a 4-6 word title after the first exchange and persist it in meta."""
+    from ..db.database import SessionLocal as _SessionLocal
+    from langchain_core.messages import HumanMessage, SystemMessage
+
+    db = _SessionLocal()
+    try:
+        msgs = [
+            SystemMessage(content=(
+                "Generate a concise 4-6 word title for a therapy conversation based on "
+                "the first message and reply. Return ONLY the title — no quotes, no period. "
+                "Examples: 'Job loss and self-worth', 'Anxiety about the future', "
+                "'Grief after losing a parent', 'Struggling with loneliness'"
+            )),
+            HumanMessage(content=(
+                f"User: {user_message[:300]}\nBot: {bot_reply[:300]}"
+            )),
+        ]
+        raw = await llm_provider.agenerate(msgs)
+        title = str(raw).strip().strip("\"'").strip()[:80]
+
+        convo = db.query(Conversation).filter_by(id=conversation_id).first()
+        if convo:
+            meta = dict(convo.meta or {})
+            meta["title"] = title
+            convo.meta = meta
+            db.commit()
+            print(f"✅ Conversation title generated: '{title}'")
+    except Exception as exc:
+        print(f"⚠️  Title generation failed: {exc}")
     finally:
         db.close()
 
@@ -48,6 +109,7 @@ async def send_message(
 
     The pipeline provides complete explainability for all processing decisions.
     """
+    _check_rate_limit(str(user.id))
     stateful_pipeline = get_stateful_pipeline(db=db, background=background)
     pipeline_start = time.time()
     print(f"\n🚀 Starting enhanced message pipeline for user {user.id}")
@@ -78,7 +140,7 @@ async def send_message(
     recent_history = db.query(Message)\
         .filter_by(conversation_id=convo.id)\
         .order_by(Message.timestamp.desc())\
-        .limit(15)\
+        .limit(20)\
         .all()
 
     recent_history.reverse()
@@ -161,6 +223,16 @@ async def send_message(
     convo.last_activity_at = bot_msg.timestamp
     db.commit()
 
+    # Generate a title after the very first exchange (no prior history)
+    if len(conversation_history) == 0 and stateful_pipeline.llm_provider:
+        background.add_task(
+            _generate_conversation_title,
+            stateful_pipeline.llm_provider,
+            clean_content,
+            bot_reply,
+            convo.id,
+        )
+
     # Only refresh the bot message we're returning
     db.refresh(bot_msg)
     db_save_time = time.time() - db_prep_start
@@ -194,6 +266,120 @@ async def send_message(
         "content": bot_msg.content,
         "timestamp": bot_msg.timestamp
     }
+
+
+@router.post("/messages/stream")
+async def stream_message(
+    message: MessageCreate,
+    background: BackgroundTasks,
+    user: UserOut = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    SSE endpoint that streams the bot response token-by-token.
+
+    Response format (text/event-stream):
+      data: {"token": "Hello"}\n\n
+      data: {"token": " there"}\n\n
+      data: {"done": true, "id": "...", "timestamp": "..."}\n\n
+    """
+    _check_rate_limit(str(user.id))
+    stateful_pipeline = get_stateful_pipeline(db=db, background=background)
+
+    convo = db.query(Conversation).filter_by(
+        uuid=message.conversation_id, user_id=user.id
+    ).first()
+    if not convo:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+
+    clean_content = bleach.clean(message.content.strip())
+    if not clean_content:
+        raise HTTPException(status_code=400, detail="Message content is empty or invalid")
+
+    # Load history while the session is still alive
+    recent_history = (
+        db.query(Message)
+        .filter_by(conversation_id=convo.id)
+        .order_by(Message.timestamp.desc())
+        .limit(20)
+        .all()
+    )
+    recent_history.reverse()
+    conversation_history = [{"role": str(m.sender.value if hasattr(m.sender, 'value') else m.sender), "text": m.content} for m in recent_history]
+
+    # ── Extract plain Python values BEFORE any commit ───────────────
+    # FastAPI closes the get_db() session when StreamingResponse is returned,
+    # so we must not rely on ORM objects inside the async generator.
+    convo_pk   = convo.id          # UUID primary key
+    user_pk    = user.id
+    user_gen   = str(user.gender) if user.gender else None
+    is_first_exchange = len(conversation_history) == 0
+    # ────────────────────────────────────────────────────────────────
+
+    # Save user message using the still-open session
+    user_msg = Message(conversation_id=convo_pk, sender="user", content=clean_content)
+    db.add(user_msg)
+    db.commit()
+    db.refresh(user_msg)
+    user_msg_pk = user_msg.id      # plain UUID, safe to close session after this
+
+    async def event_generator():
+        # Open a FRESH session — the outer db session is closed by now.
+        from ..db.database import SessionLocal as _SL
+        db2 = _SL()
+        full_response = ""
+        try:
+            async for token in stateful_pipeline.process_query_stream(
+                query=clean_content,
+                user_id=str(user_pk),
+                conversation_id=str(convo_pk),
+                message_id=str(user_msg_pk),
+                conversation_history=conversation_history,
+                user_gender=user_gen,
+                db=db2,
+                background=background,
+            ):
+                full_response += token
+                yield f"data: {json.dumps({'token': token})}\n\n"
+        except Exception as exc:
+            print(f"Stream error: {exc}")
+            if not full_response:
+                full_response = "I'm here to support you. How can I help you today?"
+                yield f"data: {json.dumps({'token': full_response})}\n\n"
+
+        # Persist bot message with the fresh session
+        safe_reply = bleach.clean(full_response) if full_response else "I'm here to support you."
+        try:
+            bot_msg = Message(conversation_id=convo_pk, sender="bot", content=safe_reply)
+            db2.add(bot_msg)
+            # Update last_activity_at by re-fetching convo from the fresh session
+            convo2 = db2.get(Conversation, convo_pk)
+            if convo2:
+                convo2.last_activity_at = bot_msg.timestamp
+            db2.commit()
+            db2.refresh(bot_msg)
+
+            if is_first_exchange and stateful_pipeline.llm_provider:
+                background.add_task(
+                    _generate_conversation_title,
+                    stateful_pipeline.llm_provider,
+                    clean_content,
+                    safe_reply,
+                    convo_pk,
+                )
+
+            yield f"data: {json.dumps({'done': True, 'id': str(bot_msg.uuid), 'timestamp': bot_msg.timestamp.isoformat()})}\n\n"
+        except Exception as save_exc:
+            print(f"Stream DB save error: {save_exc}")
+            yield f"data: {json.dumps({'done': True, 'id': None, 'timestamp': None})}\n\n"
+        finally:
+            db2.close()
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
 @router.get("/context", response_model=List[MessageOut])

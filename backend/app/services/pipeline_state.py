@@ -42,6 +42,15 @@ class ResponseStrategy(Enum):
     IDLE = "IDLE"
 
 
+class TherapeuticPhase(Enum):
+    """Structured phases of a therapy session arc."""
+    OPENING    = "opening"     # Build safety; understand why they're here (turns 1-2)
+    EXPLORING  = "exploring"   # Go wider and deeper; gather the full picture (turns 3-5)
+    REFLECTING = "reflecting"  # Name patterns; mirror insights back (turns 6-8)
+    WORKING    = "working"     # Active meaning-making; coping if asked (turns 9-12)
+    CLOSING    = "closing"     # Consolidate; plan next steps (turn 13+)
+
+
 class ProcessingMetadata(BaseModel):
     """Metadata for processing steps with explainability."""
     step_name: str
@@ -137,6 +146,16 @@ class StatefulPipelineState(TypedDict):
     llm_provider: Optional[Any]
     cultural_helper: Optional[Any]
 
+    # Therapeutic arc
+    therapeutic_phase: Optional[str]   # TherapeuticPhase.value — set by EmpathyNode each turn
+
+    # Multi-turn crisis trajectory
+    crisis_trajectory: Optional[str]   # "escalating" | "persistent_high" | "stable" | "de-escalating"
+
+    # Emotion trajectory across turns
+    emotion_trajectory: Optional[List[str]]  # emotions per recent user turn, oldest → newest
+    emotion_shift: Optional[str]             # "improving" | "worsening" | "stable" | "fluctuating"
+
 
 
 
@@ -184,7 +203,11 @@ def create_initial_pipeline_state(
         "rag_enhancement_applied": False,
         "rag_relevance_score": 0.0,
         "llm_provider": None,
-        "cultural_helper": None
+        "cultural_helper": None,
+        "therapeutic_phase": None,
+        "crisis_trajectory": None,
+        "emotion_trajectory": None,
+        "emotion_shift": None,
     }
 
 

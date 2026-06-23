@@ -1,8 +1,9 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react';
-import { sendMessage, sendVoiceMessage } from '../api/api';
+import { sendVoiceMessage, streamMessageResponse } from '../api/api';
 import Message from './Message';
 import Sidebar from './Sidebar';
 import WelcomeScreen from './WelcomeScreen';
+import DeleteConfirmModal from './DeleteConfirmModal';
 import useChatAPI from './useChatAPI';
 import './ChatDashboard.css';
 
@@ -28,6 +29,9 @@ export default function ChatDashboard() {
   const [isLoadingConversations, setIsLoadingConversations] = useState(true);
   const [hasStartedChat, setHasStartedChat] = useState(false);
   const [sidebarVisible, setSidebarVisible] = useState(false);
+  const [deleteModal, setDeleteModal] = useState(null); // { id, label } | null
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [darkMode, setDarkMode] = useState(() => localStorage.getItem('darkMode') === '1');
 
   // --- Voice state ---
   const [isRecording, setIsRecording] = useState(false);
@@ -41,6 +45,7 @@ export default function ChatDashboard() {
   const recordStartedAtRef = useRef(0);
 
   const messagesEndRef = useRef(null);
+  const textareaRef = useRef(null);
 
   // Use custom hook for API operations
   const {
@@ -94,22 +99,44 @@ export default function ChatDashboard() {
     const newChat = { id: newChatData.id, started_at: newChatData.started_at };
     setSelectedChat(newChat);
     setMessages([]);
+    setHasStartedChat(false); // show welcome screen for the fresh chat
   }, [createConversation, fetchConversations]);
 
-  const handleDeleteChat = useCallback(async (chatId, e) => {
+  const handleDeleteChat = useCallback((chatId, e) => {
     e.stopPropagation();
-    if (!window.confirm('Are you sure you want to delete this conversation?')) return;
+    const chat = conversations.find(c => c.id === chatId);
+    const firstMsg = chat?.messages?.find(m => m.sender === 'user')?.content;
+    const label = firstMsg
+      ? firstMsg.slice(0, 30) + (firstMsg.length > 30 ? '…' : '')
+      : `Started ${new Date(chat?.started_at).toLocaleDateString()}`;
+    setDeleteModal({ id: chatId, label });
+  }, [conversations]);
 
-    const success = await deleteConversation(chatId);
+  const handleConfirmDelete = useCallback(async () => {
+    if (!deleteModal) return;
+    setIsDeleting(true);
+    const success = await deleteConversation(deleteModal.id);
+    setIsDeleting(false);
+    setDeleteModal(null);
     if (success) {
-      if (selectedChat?.id === chatId) {
-        setSelectedChat(null);
-        setMessages([]);
-      }
+      const wasSelected = selectedChat?.id === deleteModal.id;
       const conversationsData = await fetchConversations();
       setConversations(conversationsData);
+
+      // If the deleted chat was open, or no chats remain → welcome screen
+      if (wasSelected || conversationsData.length === 0) {
+        // Pick the next available chat, or go to welcome state
+        const next = conversationsData.find(c => c.id !== deleteModal.id) ?? null;
+        setSelectedChat(next);
+        setMessages([]);
+        setHasStartedChat(false);
+      }
     }
-  }, [deleteConversation, fetchConversations, selectedChat]);
+  }, [deleteModal, deleteConversation, fetchConversations, selectedChat]);
+
+  const handleCancelDelete = useCallback(() => {
+    if (!isDeleting) setDeleteModal(null);
+  }, [isDeleting]);
 
   const handleLogout = useCallback(() => {
     localStorage.removeItem('token');
@@ -119,7 +146,9 @@ export default function ChatDashboard() {
 
   const toggleSidebar = useCallback(() => setSidebarVisible(prev => !prev), []);
 
-  // -------- TEXT SEND --------
+  // -------- TEXT SEND (SSE streaming) --------
+  const STREAMING_ID = '__streaming__';
+
   const handleSend = useCallback(async () => {
     if (!input.trim() || !selectedChat) return;
 
@@ -130,28 +159,66 @@ export default function ChatDashboard() {
       content: input,
       timestamp: new Date().toISOString()
     };
-
     setMessages(prev => [...prev, userMsg]);
     const originalInput = input;
     setInput('');
-    setLoading(true);
+    if (textareaRef.current) textareaRef.current.style.height = 'auto';
+    setLoading(true); // shows animated typing indicator
 
     try {
-      const res = await sendMessage(selectedChat.id, originalInput);
-      if (!res?.response?.content) throw new Error('Invalid bot response');
+      const response = await streamMessageResponse(selectedChat.id, originalInput);
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
 
-      const botMsg = {
+      // Insert empty bot bubble that we'll fill token-by-token
+      setMessages(prev => [...prev, {
+        id: STREAMING_ID,
         sender: 'bot',
-        content: res.response.content,
-        timestamp: res.response.timestamp || new Date().toISOString(),
-        emotion: res.emotion || null
-      };
-      setMessages(prev => [...prev, botMsg]);
+        content: '',
+        timestamp: new Date().toISOString()
+      }]);
+      setLoading(false); // hide indicator — streaming bubble takes over
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      let finalMeta = null;
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() ?? '';
+
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue;
+          try {
+            const data = JSON.parse(line.slice(6));
+            if (data.token !== undefined) {
+              setMessages(prev => prev.map(m =>
+                m.id === STREAMING_ID
+                  ? { ...m, content: m.content + data.token }
+                  : m
+              ));
+            } else if (data.done) {
+              finalMeta = { id: data.id, timestamp: data.timestamp };
+            }
+          } catch { /* ignore malformed SSE lines */ }
+        }
+      }
+
+      // Replace temporary id with the real DB id + timestamp
+      setMessages(prev => prev.map(m =>
+        m.id === STREAMING_ID
+          ? { ...m, id: finalMeta?.id ?? m.id, timestamp: finalMeta?.timestamp ?? m.timestamp }
+          : m
+      ));
+
     } catch (err) {
-      handleError(err, 'Failed to send message');
-      // revert UI
-      setMessages(prev => prev.filter(m => m !== userMsg));
+      setMessages(prev => prev.filter(m => m.id !== STREAMING_ID));
       setInput(originalInput);
+      handleError(err, 'Failed to send message');
     } finally {
       setLoading(false);
     }
@@ -286,7 +353,7 @@ export default function ChatDashboard() {
 
   return (
     <div
-      className="chat-dashboard"
+      className={`chat-dashboard${darkMode ? ' dark' : ''}`}
       style={{
         '--sidebar-width': sidebarVisible ? '320px' : '0px',
         '--sidebar-shadow': sidebarVisible ? '2px 0 20px rgba(109, 40, 217, 0.15)' : 'none'
@@ -313,6 +380,17 @@ export default function ChatDashboard() {
             {sidebarVisible ? '✕' : '☰'}
           </button>
           <div className="header-title">MINDORA</div>
+          <button
+            className="dark-toggle-btn"
+            title={darkMode ? 'Switch to light mode' : 'Switch to dark mode'}
+            onClick={() => setDarkMode(prev => {
+              const next = !prev;
+              localStorage.setItem('darkMode', next ? '1' : '0');
+              return next;
+            })}
+          >
+            {darkMode ? '☀️' : '🌙'}
+          </button>
         </div>
 
         <div className="chat-content">
@@ -320,7 +398,14 @@ export default function ChatDashboard() {
             <div className="messages">
               {error && <div className="error-message">{error}</div>}
               {isLoadingConversations && <div className="loading-text">Loading conversations...</div>}
-              {!isLoadingConversations && !error && !hasStartedChat && messages.length === 0 && <WelcomeScreen />}
+              {!isLoadingConversations && !error && !hasStartedChat && messages.length === 0 && (
+                <WelcomeScreen
+                  onSuggestionClick={text => {
+                    setInput(text);
+                    setTimeout(() => textareaRef.current?.focus(), 0);
+                  }}
+                />
+              )}
 
               {groupMessagesByDate(messages).map(([date, messagesForDate]) => (
                 <React.Fragment key={date}>
@@ -335,7 +420,13 @@ export default function ChatDashboard() {
                 </React.Fragment>
               ))}
 
-              {loading && <div className="message bot">Mindora is typing...</div>}
+              {loading && (
+                <div className="message bot typing-message">
+                  <span className="typing-dot" />
+                  <span className="typing-dot" />
+                  <span className="typing-dot" />
+                </div>
+              )}
               <div ref={messagesEndRef} />
             </div>
 
@@ -369,9 +460,15 @@ export default function ChatDashboard() {
                     <>
                       {/* Normal text input when no voice clip waiting */}
                       <textarea
+                        ref={textareaRef}
                         className="input-box"
                         value={input}
-                        onChange={e => setInput(e.target.value)}
+                        onChange={e => {
+                          setInput(e.target.value);
+                          const ta = e.target;
+                          ta.style.height = 'auto';
+                          ta.style.height = Math.min(ta.scrollHeight, 120) + 'px';
+                        }}
                         onKeyDown={handleKeyDown}
                         placeholder="Type your message... (Press Enter to send, Shift+Enter for new line)"
                         rows={1}
@@ -393,6 +490,15 @@ export default function ChatDashboard() {
           </div>
         </div>
       </div>
+
+      {deleteModal && (
+        <DeleteConfirmModal
+          chatLabel={deleteModal.label}
+          onConfirm={handleConfirmDelete}
+          onCancel={handleCancelDelete}
+          isDeleting={isDeleting}
+        />
+      )}
     </div>
   );
 }

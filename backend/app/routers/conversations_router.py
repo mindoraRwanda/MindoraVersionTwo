@@ -46,6 +46,7 @@ def list_user_conversations(
         {
             "id": c.uuid,
             "started_at": c.started_at,
+            "title": (c.meta or {}).get("title"),
             "messages": [
                 {
                     "id": msg.uuid,

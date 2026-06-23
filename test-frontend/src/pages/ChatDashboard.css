@@ -22,16 +22,19 @@
   height: 100vh;
   background: rgb(109, 40, 217);
   color: white;
-  overflow-y: auto;
-  overflow-x: hidden;
+  overflow: hidden;
   box-shadow: var(--sidebar-shadow, none);
+  display: flex;
+  flex-direction: column;
 }
 
 .sidebar-content {
   padding: 20px;
-  height: 100%;
+  flex: 1;
   display: flex;
   flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .main-content {
@@ -96,11 +99,39 @@
   overflow: hidden;
 }
 
-.sidebar h3 {
+.sidebar-heading {
   margin-bottom: 16px;
   font-size: 16px;
   font-weight: 600;
   color: rgba(255, 255, 255, 0.9);
+}
+
+.chat-list {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  min-height: 0;        /* required: lets flex children shrink below content height */
+  margin-bottom: 12px;
+  /* subtle scrollbar so it doesn't look broken */
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255,255,255,0.2) transparent;
+}
+
+.chat-list::-webkit-scrollbar {
+  width: 4px;
+}
+
+.chat-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.chat-list::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 4px;
+}
+
+.chat-list::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.35);
 }
 
 .new-chat-btn {
@@ -127,7 +158,7 @@
 
 .logout-btn {
   width: 100%;
-  margin-top: auto;
+  flex-shrink: 0;
   background: rgba(220, 38, 38, 0.9);
   color: white;
   border: 1px solid rgba(220, 38, 38, 0.8);
@@ -146,6 +177,25 @@
 .logout-btn:hover {
   background: rgba(220, 38, 38, 1);
   border-color: rgba(220, 38, 38, 1);
+}
+
+.chat-date-group {
+  margin-bottom: 4px;
+}
+
+.chat-date-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.45);
+  padding: 10px 4px 4px;
+  margin: 0;
+  user-select: none;
+}
+
+.chat-date-group:first-child .chat-date-label {
+  padding-top: 2px;
 }
 
 .chat-item-container {
@@ -190,27 +240,31 @@
   padding: 4px;
   margin-right: 8px;
   background: none;
-  color: rgba(255, 255, 255, 0.6);
+  color: rgba(255, 255, 255, 0.45);
   border: none;
   border-radius: 4px;
   cursor: pointer;
   font-size: 14px;
   transition: all 0.2s ease;
-  width: 24px;
-  height: 24px;
+  width: 28px;
+  height: 28px;
   display: flex;
   align-items: center;
   justify-content: center;
-  opacity: 0;
+  opacity: 0.45;
+  flex-shrink: 0;
 }
 
 .chat-item-container:hover .delete-btn {
   opacity: 1;
+  color: rgba(255, 255, 255, 0.8);
 }
 
 .delete-btn:hover {
-  background: rgba(239, 68, 68, 0.2);
-  color: #ef4444;
+  background: rgba(239, 68, 68, 0.25);
+  color: #ef4444 !important;
+  opacity: 1;
+  transform: scale(1.1);
 }
 
 .chat-panel {
@@ -293,6 +347,36 @@
   border: 1px solid rgba(0, 0, 0, 0.08);
   border-bottom-left-radius: 4px;
 }
+
+/* ── Animated typing indicator ───────────────────────────── */
+.typing-message {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 14px 18px;
+  min-width: 56px;
+}
+
+.typing-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #374151;
+  animation: typing-bounce 1.3s infinite ease-in-out;
+}
+
+.chat-dashboard.dark .typing-dot {
+  background: #e5e7eb;
+}
+
+.typing-dot:nth-child(2) { animation-delay: 0.18s; }
+.typing-dot:nth-child(3) { animation-delay: 0.36s; }
+
+@keyframes typing-bounce {
+  0%, 60%, 100% { transform: translateY(0);    opacity: 0.5; }
+  30%            { transform: translateY(-6px); opacity: 1;   }
+}
+/* ─────────────────────────────────────────────────────────── */
 
 .message.has-audio {
   padding: 12px;
@@ -466,11 +550,22 @@
   color: rgba(255, 255, 255, 0.7);
 }
 
+.message-content-wrapper {
+  display: flex;
+  flex-direction: column;
+}
+
 .timestamp {
   font-size: 11px;
   color: #9ca3af;
   padding: 0 4px;
   font-weight: 500;
+  opacity: 0;
+  transition: opacity 0.18s ease;
+}
+
+.message-content-wrapper:hover .timestamp {
+  opacity: 1;
 }
 
 /* Input bar - fixed at bottom */
@@ -846,9 +941,19 @@
   padding: 0.75rem 1.25rem;
   background: #f3f4f6;
   border-radius: 9999px;
+  border: none;
+  cursor: pointer;
+  font-family: inherit;
   opacity: 0;
   transform: translateY(20px);
-  transition: opacity 0.5s ease, transform 0.5s ease;
+  transition: opacity 0.5s ease, transform 0.5s ease, background 0.15s ease, box-shadow 0.15s ease;
+}
+
+.suggestion-item:hover,
+.suggestion-item:focus-visible {
+  background: #e9d5ff;
+  box-shadow: 0 2px 8px rgba(109, 40, 217, 0.18);
+  outline: none;
 }
 
 .suggestion-visible {
@@ -1020,3 +1125,97 @@
     flex: 1;
   }
 }
+
+/* ── Dark mode ──────────────────────────────────────────────── */
+.chat-dashboard.dark {
+  background: #111827;
+}
+
+.chat-dashboard.dark .main-content {
+  background: #111827;
+}
+
+.chat-dashboard.dark .header {
+  background: #1f2937;
+  border-bottom-color: rgba(255, 255, 255, 0.08);
+}
+
+.chat-dashboard.dark .header-title {
+  color: #e5e7eb;
+}
+
+.chat-dashboard.dark .hamburger-btn {
+  color: #e5e7eb;
+}
+
+.chat-dashboard.dark .messages {
+  background: #111827;
+}
+
+.chat-dashboard.dark .date-header {
+  color: #6b7280;
+  background: #111827;
+}
+
+.chat-dashboard.dark .bot {
+  background: #1f2937;
+  color: #e5e7eb;
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+.chat-dashboard.dark .input-bar {
+  background: #1f2937;
+  border-top-color: rgba(255, 255, 255, 0.08);
+}
+
+.chat-dashboard.dark .input-box {
+  background: #374151;
+  color: #e5e7eb;
+  border-color: rgba(255, 255, 255, 0.15);
+}
+
+.chat-dashboard.dark .input-box::placeholder {
+  color: #9ca3af;
+}
+
+.chat-dashboard.dark .input-box:focus {
+  border-color: rgb(139, 92, 246);
+  box-shadow: 0 0 0 2px rgba(139, 92, 246, 0.2);
+}
+
+.chat-dashboard.dark .mic-btn {
+  background: #374151;
+  color: #e5e7eb;
+  border-color: rgba(255, 255, 255, 0.15);
+}
+
+.chat-dashboard.dark .typing-dot {
+  background: #6b7280;
+}
+
+.chat-dashboard.dark .timestamp {
+  color: #6b7280;
+}
+
+.dark-toggle-btn {
+  margin-left: auto;
+  background: none;
+  border: 1px solid rgba(0, 0, 0, 0.15);
+  color: #374151;
+  border-radius: 8px;
+  padding: 6px 10px;
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
+  transition: background 0.15s ease;
+}
+
+.chat-dashboard.dark .dark-toggle-btn {
+  border-color: rgba(255, 255, 255, 0.2);
+  color: #e5e7eb;
+}
+
+.dark-toggle-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+/* ─────────────────────────────────────────────────────────── */

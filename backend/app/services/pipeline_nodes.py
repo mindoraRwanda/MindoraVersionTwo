@@ -18,7 +18,7 @@ from fastapi import BackgroundTasks
 from .pipeline_state import (
     StatefulPipelineState, QueryValidationResult, CrisisAssessment,
     EmotionDetection, QueryEvaluation, ProcessingMetadata,
-    QueryType, CrisisSeverity, ResponseStrategy,
+    QueryType, CrisisSeverity, ResponseStrategy, TherapeuticPhase,
     add_processing_metadata, increment_llm_calls, add_error,
     set_detected_language, add_cultural_context
 )
@@ -40,6 +40,18 @@ class QueryValidationOutput(BaseModel):
     is_random: bool = Field(..., description="Whether the query is random/off-topic.")
     query_type: str = Field(..., description="Type of query, e.g., 'mental_health'.")
     cultural_indicators: List[str] = Field([], description="Cultural context considerations in the query.")
+
+
+class UnifiedAnalysisOutput(BaseModel):
+    """Single structured output that replaces QueryValidation + CrisisDetection + QueryEvaluation."""
+    query_type: str = Field(..., description="One of: mental_health, greeting, casual, random, unclear")
+    is_random: bool = Field(..., description="True if message is completely off-topic (not mental health)")
+    query_confidence: float = Field(..., description="Confidence 0-1 that this is a mental health query")
+    is_crisis: bool = Field(..., description="True ONLY for explicit suicidal ideation, active self-harm, or imminent danger")
+    crisis_severity: str = Field(..., description="severe, high, medium, low, or none")
+    crisis_confidence: float = Field(..., description="Crisis assessment confidence 0-1")
+    crisis_keywords: List[str] = Field(default=[], description="Exact phrases that triggered the crisis flag")
+    crisis_reason: str = Field(..., description="One sentence explaining the crisis assessment")
 
 class CrisisDetectionOutput(BaseModel):
     """Pydantic model for crisis detection output."""
@@ -86,6 +98,171 @@ class BasePipelineNode(ABC):
         """Execute the node's processing logic."""
         pass
     
+    @staticmethod
+    def _build_session_context(history: List[Dict[str, Any]]) -> str:
+        """Compress older conversation turns into a compact session narrative.
+
+        Returns an empty string when history is short enough to inject verbatim.
+        Only the last 4 messages are kept raw; everything before them is summarised here.
+        """
+        if len(history) <= 4:
+            return ""
+
+        older = history[:-4]
+        lines = ["[Earlier in this session:]"]
+        turn_num = 0
+        for msg in older:
+            role = str(msg.get("role", "user")).lower()
+            text = (msg.get("text") or msg.get("content") or "").strip()
+            if not text:
+                continue
+            if role == "user":
+                turn_num += 1
+                truncated = text[:150] + "..." if len(text) > 150 else text
+                lines.append(f"  Turn {turn_num} (user): {truncated}")
+            # Bot turns are implicit — omitting them halves token cost with minimal loss
+
+        return "\n".join(lines) if len(lines) > 1 else ""
+
+    @staticmethod
+    def _compute_therapeutic_phase(exchange_count: int, history: List[Dict[str, Any]]) -> TherapeuticPhase:
+        """Determine the current therapeutic phase from conversation progress.
+
+        Primary signal is exchange count; a secondary distress signal slows
+        advancement so the model doesn't rush through phases when the user is
+        still processing heavy emotions.
+        """
+        # Detect sustained distress: if the last 3 user messages all contain
+        # heavy-emotion markers, hold in the current phase one step longer.
+        distress_words = {
+            "hopeless", "hopelessness", "worthless", "can't go on", "end it",
+            "no point", "hate myself", "give up", "can't cope", "breaking down",
+        }
+        recent_user_texts = [
+            (msg.get("text") or msg.get("content") or "").lower()
+            for msg in history[-6:]
+            if str(msg.get("role", "")).lower() == "user"
+        ]
+        sustained_distress = (
+            len(recent_user_texts) >= 2
+            and sum(
+                any(w in t for w in distress_words) for t in recent_user_texts
+            ) >= 2
+        )
+        # Apply a -1 adjustment so phase advances one turn later under distress
+        effective_count = max(1, exchange_count - (1 if sustained_distress else 0))
+
+        if effective_count <= 2:
+            return TherapeuticPhase.OPENING
+        elif effective_count <= 5:
+            return TherapeuticPhase.EXPLORING
+        elif effective_count <= 8:
+            return TherapeuticPhase.REFLECTING
+        elif effective_count <= 12:
+            return TherapeuticPhase.WORKING
+        else:
+            return TherapeuticPhase.CLOSING
+
+    @staticmethod
+    def _analyze_distress_trajectory(history: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """Scan user turns for escalating or persistent distress patterns.
+
+        Distress tiers (based on keyword matching):
+          0 — neutral
+          1 — mild      (sad, anxious, stressed, lonely…)
+          2 — moderate  (hopeless, worthless, empty, can't cope…)
+          3 — severe    (want to die, hurt myself, suicidal…)
+
+        Returns a dict with:
+          trajectory    : "escalating" | "persistent_high" | "stable" | "de-escalating"
+          max_tier      : highest tier seen across all turns
+          should_upgrade: True when the single-turn assessment should be raised
+          turn_scores   : per-turn tier list (user messages only)
+        """
+        TIER_3 = {
+            "want to die", "kill myself", "end my life", "commit suicide",
+            "hurting myself", "cutting myself", "better off dead",
+            "not worth living", "can't go on", "no reason to live",
+        }
+        TIER_2 = {
+            "hopeless", "worthless", "empty inside", "feel empty", "numb",
+            "can't cope", "no way out", "trapped", "breaking down",
+            "want to disappear", "nobody cares", "hate myself",
+        }
+        TIER_1 = {
+            "sad", "depressed", "anxious", "stressed", "lonely", "lost",
+            "worried", "overwhelmed", "exhausted", "struggling", "suffering",
+            "unhappy", "upset", "down", "low",
+        }
+
+        def _tier(text: str) -> int:
+            t = text.lower()
+            if any(w in t for w in TIER_3):
+                return 3
+            if any(w in t for w in TIER_2):
+                return 2
+            if any(w in t for w in TIER_1):
+                return 1
+            return 0
+
+        user_turns = [
+            msg for msg in history
+            if str(msg.get("role", "")).lower() == "user"
+        ]
+
+        if len(user_turns) < 2:
+            return {
+                "trajectory": "stable",
+                "max_tier": _tier(user_turns[0].get("text") or user_turns[0].get("content") or "") if user_turns else 0,
+                "should_upgrade": False,
+                "turn_scores": [],
+            }
+
+        scores = [
+            _tier(msg.get("text") or msg.get("content") or "")
+            for msg in user_turns
+        ]
+        max_tier = max(scores)
+        recent = scores[-4:]  # analyse up to last 4 user turns
+
+        # Escalating: each recent score >= previous AND final > first
+        is_escalating = (
+            len(recent) >= 3
+            and all(recent[i] >= recent[i - 1] for i in range(1, len(recent)))
+            and recent[-1] > recent[0]
+            and recent[-1] >= 2
+        )
+
+        # Persistent high: average of recent scores >= 2, no turn below 1
+        avg_recent = sum(recent) / len(recent)
+        is_persistent = (
+            len(recent) >= 3
+            and avg_recent >= 2.0
+            and min(recent) >= 1
+        )
+
+        if is_escalating:
+            trajectory = "escalating"
+        elif is_persistent:
+            trajectory = "persistent_high"
+        elif len(recent) >= 2 and recent[-1] < recent[0]:
+            trajectory = "de-escalating"
+        else:
+            trajectory = "stable"
+
+        # Only recommend an upgrade when there are enough turns to be confident
+        should_upgrade = (
+            trajectory in ("escalating", "persistent_high")
+            and len(user_turns) >= 3
+        )
+
+        return {
+            "trajectory": trajectory,
+            "max_tier": max_tier,
+            "should_upgrade": should_upgrade,
+            "turn_scores": scores,
+        }
+
     async def _call_llm(self, system_prompt: str, user_prompt: str, state: StatefulPipelineState, structured_output: Optional[Any] = None) -> Any:
         """Make LLM call with error handling and optional structured output."""
         try:
@@ -98,14 +275,22 @@ class BasePipelineNode(ABC):
             system_message = SystemMessage(content=system_prompt)
             human_message = HumanMessage(content=user_prompt)
 
-            # For response-generation calls (no structured schema), inject the last
-            # few conversation turns so the model can give context-aware replies.
+            # For response-generation calls (no structured schema), inject conversation
+            # context so the model can give context-aware replies.
+            # Strategy: compressed summary of older turns + last 4 messages verbatim.
             # Structured-output calls (classification/analysis) stay as [system, human]
             # to avoid polluting the JSON schema response.
             messages: List[Any] = [system_message]
             if not structured_output:
                 history = state.get("conversation_history") or []
-                for turn in history[-8:]:  # keep last 4 exchanges (8 messages)
+
+                # Inject compressed context for older turns (if any)
+                session_ctx = self._build_session_context(history)
+                if session_ctx:
+                    messages.append(SystemMessage(content=session_ctx))
+
+                # Inject last 4 messages verbatim for immediate context
+                for turn in history[-4:]:
                     role = str(turn.get("role", "user")).lower()
                     text = (turn.get("text") or turn.get("content") or "").strip()
                     if not text:
@@ -148,11 +333,39 @@ class BasePipelineNode(ABC):
             add_error(state, f"LLM call error: {str(e)}")
             return None
 
+    async def _stream_llm(self, system_prompt: str, user_prompt: str, state: StatefulPipelineState):
+        """Like _call_llm but yields token chunks instead of buffering.  Mutates nothing in state."""
+        if self.llm_provider is None:
+            raise RuntimeError("LLM provider is not initialized.")
+
+        system_message = SystemMessage(content=system_prompt)
+        messages: List[Any] = [system_message]
+
+        history = state.get("conversation_history") or []
+        session_ctx = self._build_session_context(history)
+        if session_ctx:
+            messages.append(SystemMessage(content=session_ctx))
+
+        for turn in history[-4:]:
+            role = str(turn.get("role", "user")).lower()
+            text = (turn.get("text") or turn.get("content") or "").strip()
+            if not text:
+                continue
+            if role in ("bot", "assistant"):
+                messages.append(AIMessage(content=text))
+            else:
+                messages.append(HumanMessage(content=text))
+
+        messages.append(HumanMessage(content=user_prompt))
+
+        async for token in self.llm_provider.astream_text(messages):
+            yield token
+
     async def _generate_response(
-        self, 
-        state: StatefulPipelineState, 
-        node_name: str, 
-        system_prompt_template: str, 
+        self,
+        state: StatefulPipelineState,
+        node_name: str,
+        system_prompt_template: str,
         user_prompt_template: str
     ) -> StatefulPipelineState:
         """Generic response generation method."""
@@ -477,29 +690,49 @@ class CrisisDetectionNode(BasePipelineNode):
             
             # Use LLM for crisis detection with cultural context
             system_prompt = f"""
-            You are a crisis detection specialist with cultural awareness for {language} speakers.
-            
-            {cultural_prompt}
-            
-            Analyze the query for crisis indicators with cultural sensitivity:
-            0. Is crisis present? (true/false)
-            1. Crisis confidence score (0-1)
-            2. Crisis keywords found (including cultural expressions)
-            3. Reasoning for assessment
-            4. crisis_severity level: severe, high, medium, low, none
-            5. Cultural stigma considerations
-            6. Indirect crisis communication patterns
-            
-            Consider that in Rwandan culture, mental health crises may be expressed indirectly due to stigma.
-            Look for cultural expressions of distress, family concerns, and community-based crisis indicators.
-            
-            Available crisis resources for {language}:
-            - National Helpline: {crisis_resources.get('national_helpline', '114')}
-            - Emergency: {crisis_resources.get('emergency', '112')}
-            - Hospitals: {', '.join(crisis_resources.get('hospitals', []))}
-            """
-            
-            user_prompt = f"Assess this query for crisis indicators with cultural awareness: '{query}'"
+You are a crisis safety classifier for a mental health chatbot serving {language} speakers.
+Your job is to detect ONLY genuine, immediate safety risks — NOT general mental health distress.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+WHAT IS A CRISIS (is_crisis = true):
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ONLY flag is_crisis=true when the message contains:
+• Explicit suicidal ideation: "I want to kill myself", "I want to end my life", "I'm thinking of suicide"
+• Active self-harm: "I am hurting myself", "I cut myself"
+• Imminent danger: "I have pills ready", "I'm about to jump", stating a plan/means/timeline
+• Strong intent to harm another person
+
+Severity scale (only used when is_crisis=true):
+• severe  — explicit plan with means and/or timeline (e.g. "I have pills in my hand right now")
+• high    — strong suicidal ideation, no immediate plan stated
+• medium  — passive death wish ("I wish I wasn't here", "maybe it would be better if I was gone")
+• low     — vague ambiguous statement that MIGHT indicate risk but is unclear
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+WHAT IS NOT A CRISIS (is_crisis = false):
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Set is_crisis=false and severity=none for ALL of the following, even if the person sounds distressed:
+• "I feel depressed" / "I am depressed" / "I've been depressed"
+• "I lost my job" / "I failed my exams" / "my relationship ended"
+• "I don't know what to do" / "I feel lost" / "I'm struggling"
+• "I'm having a hard time" / "life is hard" / "I feel hopeless"
+• "I'm sad" / "I feel empty" / "I feel numb"
+• General expressions of grief, anxiety, loneliness, or overwhelm
+• Asking for help or support WITHOUT expressing intent to harm
+
+These are signs someone needs therapeutic support — not an emergency response.
+
+{cultural_prompt}
+
+Return your assessment with:
+- is_crisis: true ONLY for immediate safety risk as defined above
+- crisis_severity: severe/high/medium/low/none
+- crisis_confidence: your confidence 0–1
+- crisis_keywords: exact phrases that triggered your assessment (empty list if none)
+- crisis_reason: one sentence explaining your decision
+"""
+
+            user_prompt = f"Classify this message for immediate safety risk: '{query}'"
             logger.info(f"📝 Crisis detection prompt prepared (system: {len(system_prompt)} chars)")
             response_data = await self._call_llm(system_prompt, user_prompt, state, structured_output=CrisisDetectionOutput)
 
@@ -568,6 +801,24 @@ class EmotionDetectionNode(BasePipelineNode):
         logger.info(f"😊 Starting emotion detection for query: '{query[:100]}{'...' if len(query) > 100 else ''}'")
         
         try:
+            # ── Language detection (Kinyarwanda / French / English) ──────────
+            # Only detect if the message is long enough to be reliable (≥6 chars)
+            if not state.get("detected_language") and len(query) >= 6:
+                try:
+                    from langdetect import detect as _langdetect
+                    raw_lang = _langdetect(query)
+                    # Normalise: treat 'rw' as Kinyarwanda, 'fr' as French,
+                    # everything else defaults to 'en'
+                    lang = raw_lang if raw_lang in {"en", "fr", "rw"} else "en"
+                    set_detected_language(state, lang)
+                    logger.info(f"🌍 Language detected: {lang} (raw={raw_lang})")
+                except Exception as _le:
+                    logger.debug(f"Language detection skipped: {_le}")
+                    set_detected_language(state, "en")
+            elif not state.get("detected_language"):
+                set_detected_language(state, "en")
+            # ────────────────────────────────────────────────────────────────
+
             # Use Hybrid Classifier
             result = self.classifier.detect_emotion(query)
             
@@ -585,22 +836,60 @@ class EmotionDetectionNode(BasePipelineNode):
                 emotion_confidence=result['confidence']
             )
             state["emotion_detection"] = emotion_detection
-            
+
+            # ── Emotion trajectory across turns ───────────────────────────────
+            history = state.get("conversation_history") or []
+            prior_user_msgs = [
+                msg for msg in history
+                if str(msg.get("role", "")).lower() == "user"
+            ][-3:]  # last 3 historical turns before this one
+
+            trajectory: List[str] = []
+            for msg in prior_user_msgs:
+                txt = (msg.get("text") or msg.get("content") or "").strip()
+                if txt:
+                    try:
+                        r = self.classifier.detect_emotion(txt)
+                        trajectory.append(r["selected_emotion"])
+                    except Exception:
+                        trajectory.append("neutral")
+
+            trajectory.append(result["selected_emotion"])  # current turn
+            state["emotion_trajectory"] = trajectory
+
+            # Derive shift label
+            NEGATIVE = {"sadness", "fear", "anger", "disgust"}
+            if len(trajectory) >= 3:
+                early_neg = sum(1 for e in trajectory[:-2] if e in NEGATIVE)
+                late_neg  = sum(1 for e in trajectory[-2:] if e in NEGATIVE)
+                if late_neg > early_neg:
+                    shift = "worsening"
+                elif late_neg < early_neg:
+                    shift = "improving"
+                elif len(set(trajectory)) > 2:
+                    shift = "fluctuating"
+                else:
+                    shift = "stable"
+            else:
+                shift = "stable"
+
+            state["emotion_shift"] = shift
+            logger.info(
+                f"Emotion trajectory: {trajectory} → shift={shift}"
+            )
+            # ─────────────────────────────────────────────────────────────────
+
             processing_time = time.time() - start_time
-            
-            # Add metadata
             add_processing_metadata(
-                state, 
-                "emotion_detection", 
-                result['confidence'], 
-                reasoning, 
-                result['cultural_markers'], 
+                state,
+                "emotion_detection",
+                result['confidence'],
+                f"{reasoning} shift={shift}",
+                result['cultural_markers'],
                 processing_time
             )
-            
-            logger.info(f"✅ Emotion detected: {result['selected_emotion']} ({result['confidence']:.2f})")
+            logger.info(f"Emotion detected: {result['selected_emotion']} ({result['confidence']:.2f})")
 
-            
         except Exception as e:
             logger.error(f"❌ Emotion detection failed: {e}")
             add_error(state, f"Emotion detection error: {str(e)}")
@@ -721,47 +1010,468 @@ class QueryEvaluationNode(BasePipelineNode):
 
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Unified Analysis Node  (replaces QueryValidation + CrisisDetection + QueryEvaluation)
+# One LLM call instead of three — cuts per-message latency roughly in half.
+# ─────────────────────────────────────────────────────────────────────────────
+
+class UnifiedAnalysisNode(BasePipelineNode):
+    """Single LLM call that classifies the query type and checks crisis safety."""
+
+    async def execute(self, state: StatefulPipelineState) -> StatefulPipelineState:
+        start_time = time.time()
+        query = state["user_query"]
+
+        try:
+            cultural_context = self._get_cultural_context(state)
+            language = cultural_context["language"]
+            cultural_prompt = self._apply_cultural_integration(state, "analysis")
+
+            emotion = state.get("emotion_detection")
+            emotion_label = emotion.selected_emotion if emotion else "neutral"
+            emotion_conf = emotion.emotion_confidence if emotion else 0.0
+
+            system_prompt = f"""
+You are an analysis engine for a mental health chatbot serving {language} speakers.
+Analyze the message and return one structured JSON response covering two tasks.
+
+━━━━ TASK 1: QUERY CLASSIFICATION ━━━━
+query_type — one of:
+  mental_health : user discusses feelings, wellbeing, personal struggles, stress, grief, relationships, identity
+  greeting      : hello / hi / good morning / how are you
+  casual        : small talk, jokes, everyday chat unrelated to mental health
+  random        : completely off-topic (coding, math, facts, weather)
+  unclear       : cannot determine intent
+
+is_random       = true only when query_type is random or completely off-topic
+query_confidence = 0–1 confidence that this IS a mental health topic
+
+━━━━ TASK 2: CRISIS SAFETY DETECTION ━━━━
+Set is_crisis = true ONLY when the message contains:
+  • Explicit suicidal ideation : "I want to kill myself / end my life / commit suicide"
+  • Active self-harm            : "I am hurting / cutting myself right now"
+  • Imminent danger             : a specific plan stating means AND/OR timeline
+
+Set is_crisis = false (even if the person sounds very distressed) for ALL of:
+  • "I feel depressed" / "I am depressed" / "I've been really down"
+  • "I lost my job / failed exams / my relationship ended"
+  • "I don't know what to do" / "I feel lost" / "I'm struggling"
+  • "I feel hopeless" / "nothing seems worth it" / "I feel empty"
+  • Any general sadness, grief, anxiety, overwhelm, or distress without explicit self-harm intent
+
+crisis_severity (only meaningful when is_crisis=true):
+  severe = explicit plan with means AND timeline
+  high   = strong ideation, no immediate plan
+  medium = passive death wish ("I wish I wasn't here")
+  low    = vague, might indicate risk
+  none   = no crisis indicators
+
+crisis_keywords = exact phrases from the message that triggered the flag (empty list if none)
+crisis_reason   = one short sentence explaining your crisis decision
+
+{cultural_prompt}
+Local emotion classifier: {emotion_label} (confidence {emotion_conf:.2f}) — supporting signal only.
+"""
+
+            user_prompt = f'Analyze this message: "{query}"'
+
+            result = await self._call_llm(
+                system_prompt, user_prompt, state,
+                structured_output=UnifiedAnalysisOutput
+            )
+
+            if not result:
+                raise ValueError("UnifiedAnalysis LLM returned no data")
+
+            # ── Populate all three legacy state fields so downstream code is unaffected ──
+
+            valid_query_types = {e.value for e in QueryType}
+            qt = result.query_type if result.query_type in valid_query_types else QueryType.MENTAL_HEALTH.value
+
+            state["query_validation"] = QueryValidationResult(
+                query_confidence=result.query_confidence,
+                query_keywords=result.crisis_keywords,
+                query_reason=result.crisis_reason,
+                is_random=result.is_random,
+                query_type=QueryType(qt),
+            )
+
+            valid_severities = {e.value for e in CrisisSeverity}
+            sev = result.crisis_severity if result.crisis_severity in valid_severities else CrisisSeverity.NONE.value
+
+            state["crisis_assessment"] = CrisisAssessment(
+                is_crisis=result.is_crisis,
+                crisis_confidence=result.crisis_confidence,
+                crisis_keywords=result.crisis_keywords,
+                crisis_reason=result.crisis_reason,
+                crisis_severity=CrisisSeverity(sev),
+            )
+
+            state["query_evaluation"] = QueryEvaluation(
+                evaluation_confidence=result.query_confidence,
+                evaluation_reason="unified analysis",
+                evaluation_keywords=[],
+                evaluation_type=ResponseStrategy.GIVE_EMPATHY,
+            )
+
+            # ── Multi-turn crisis trajectory check ────────────────────────────
+            history = state.get("conversation_history") or []
+            traj = self._analyze_distress_trajectory(history)
+            state["crisis_trajectory"] = traj["trajectory"]
+
+            if traj["should_upgrade"]:
+                current = state["crisis_assessment"]
+                _severity_order = [
+                    CrisisSeverity.NONE, CrisisSeverity.LOW,
+                    CrisisSeverity.MEDIUM, CrisisSeverity.HIGH, CrisisSeverity.SEVERE,
+                ]
+                cur_idx = _severity_order.index(current.crisis_severity)
+
+                if traj["trajectory"] == "escalating" and traj["max_tier"] >= 2:
+                    # Escalating into moderate/severe distress → at least HIGH concern
+                    new_idx = max(cur_idx, _severity_order.index(CrisisSeverity.HIGH))
+                    new_is_crisis = True
+                    upgrade_reason = "multi-turn escalating distress pattern"
+                else:
+                    # Persistent moderate distress → at least MEDIUM concern
+                    new_idx = max(cur_idx, _severity_order.index(CrisisSeverity.MEDIUM))
+                    new_is_crisis = current.is_crisis  # don't flip to True on persistence alone
+                    upgrade_reason = "multi-turn persistent distress pattern"
+
+                if new_idx > cur_idx or (new_is_crisis and not current.is_crisis):
+                    state["crisis_assessment"] = CrisisAssessment(
+                        is_crisis=new_is_crisis,
+                        crisis_confidence=max(current.crisis_confidence, 0.70),
+                        crisis_keywords=current.crisis_keywords,
+                        crisis_reason=f"{current.crisis_reason} [{upgrade_reason}]",
+                        crisis_severity=_severity_order[new_idx],
+                    )
+                    logger.warning(
+                        f"Crisis upgraded by trajectory: "
+                        f"{current.crisis_severity.value} → {_severity_order[new_idx].value} "
+                        f"({traj['trajectory']}, scores={traj['turn_scores']})"
+                    )
+            # ─────────────────────────────────────────────────────────────────
+
+            processing_time = time.time() - start_time
+            add_processing_metadata(
+                state, "unified_analysis", result.query_confidence,
+                f"type={result.query_type} crisis={result.is_crisis}({result.crisis_severity}) trajectory={traj['trajectory']}",
+                result.crisis_keywords, processing_time
+            )
+            logger.info(
+                f"Unified analysis done in {processing_time:.3f}s — "
+                f"type={result.query_type} is_crisis={result.is_crisis} "
+                f"severity={result.crisis_severity} conf={result.crisis_confidence:.2f} "
+                f"trajectory={traj['trajectory']}"
+            )
+
+        except Exception as e:
+            logger.error(f"Unified analysis failed: {e}")
+            add_error(state, f"Unified analysis error: {str(e)}")
+            state["query_validation"] = QueryValidationResult(
+                query_confidence=0.5, query_keywords=[], query_reason="fallback",
+                is_random=False, query_type=QueryType.MENTAL_HEALTH,
+            )
+            state["crisis_assessment"] = CrisisAssessment(
+                is_crisis=False, crisis_confidence=0.0, crisis_keywords=[],
+                crisis_reason="fallback due to error", crisis_severity=CrisisSeverity.NONE,
+            )
+            state["query_evaluation"] = QueryEvaluation(
+                evaluation_confidence=0.5, evaluation_reason="fallback",
+                evaluation_keywords=[], evaluation_type=ResponseStrategy.GIVE_EMPATHY,
+            )
+
+        return state
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Specialized Response Nodes
+# ─────────────────────────────────────────────────────────────────────────────
 
 class EmpathyNode(BasePipelineNode):
-    """Node for generating empathetic responses."""
-    
+    """
+    Unified therapy session node.
+
+    This is the primary response node for all non-crisis mental health queries.
+    It conducts an ongoing therapeutic conversation, adapting its behaviour based on
+    conversation depth and the user's expressed needs — it never gives unsolicited
+    advice lists or helpline numbers.
+    """
+
+    # Phase-specific guidance injected into the system prompt
+    _PHASE_GUIDANCE: Dict[str, str] = {
+        TherapeuticPhase.OPENING.value: """\
+PHASE — OPENING (building safety, turns 1-2):
+Your only job right now is to make this person feel completely received.
+  • Reflect the specific thing they said — their exact situation, not a generic category.
+  • Validate without rushing to fix or reassure: "That makes complete sense."
+  • Hold back the instinct to teach, explain, or cheer them up.
+  • Ask ONE open question that invites more depth — never yes/no, never multiple questions.
+    Good starters: "What's that been like?" / "When did this start feeling this heavy?"
+    / "What do you mean when you say [their word]?"
+  • No advice, no coping tips, no referrals unless they explicitly ask.
+  • Tone: like a trusted older sibling who genuinely has time for them.""",
+
+        TherapeuticPhase.EXPLORING.value: """\
+PHASE — EXPLORING (widening the picture, turns 3-5):
+You have earned some trust. Now go deeper and wider.
+  • Explore context, history, the relationships involved — what does this actually cost them?
+  • Notice words or phrases they keep returning to, then gently name them back.
+    "You've said 'stuck' a few times now — what does stuck actually feel like for you?"
+  • Still only ONE question per turn. Resist the urge to summarise too quickly.
+  • Advice only if explicitly asked. If they ask, give ONE specific, grounded idea — not a list.""",
+
+        TherapeuticPhase.REFLECTING.value: """\
+PHASE — REFLECTING (naming patterns, turns 6-8):
+You have a fuller picture now. Begin mirroring what you've noticed across the conversation.
+  • Frame reflections tentatively — as offerings, not conclusions.
+    "There's something I keep noticing in what you're sharing — it might not land right,
+    but it feels like this isn't only about [X]. There seems to be something deeper
+    around [theme]. Does that feel true at all?"
+  • Invite them to correct or add to your reflection. Stay collaborative.
+  • Observations land better than interpretations — lean gently.
+  • No advice lists. If they ask what to do, offer ONE concrete, conversational suggestion.""",
+
+        TherapeuticPhase.WORKING.value: """\
+PHASE — WORKING (meaning-making and gentle action, turns 9-12):
+The person has done real emotional work. You can be slightly more active now.
+  • If coping hasn't come up yet, ask: "What do you feel you need most right now?"
+  • You may offer one evidence-based idea conversationally — breathing, journalling, movement,
+    speaking to someone trusted — woven naturally into a sentence, never as a prescriptive list.
+  • Professional support can now be mentioned warmly, as an option not a dismissal:
+    "What you've been carrying sounds like a lot for one person. Have you ever thought about
+    having someone to talk to regularly — a counsellor or therapist?"
+  • Help them connect the insight from this session to something small and actionable.""",
+
+        TherapeuticPhase.CLOSING.value: """\
+PHASE — CLOSING (consolidating, turn 13+):
+This conversation has come a long way. Help them feel that.
+  • Acknowledge the emotional work they've done — name it specifically, not generically.
+  • Reflect the key shift or insight that emerged, if there was one.
+  • Help them name ONE small, concrete next step they feel genuinely ready for.
+    Even "keep noticing when this feeling comes" counts as a meaningful step.
+  • If professional support hasn't come up yet and feels right, introduce it gently.
+  • Leave them with a sense of agency and connection — not helplessness or dependency.""",
+    }
+
+    def _build_empathy_prompt(self, state: StatefulPipelineState):
+        """Build system + user prompts for the empathy node. Used by both execute() and execute_stream()."""
+        query = state["user_query"]
+        cultural_context = self._get_cultural_context(state)
+        language = cultural_context["language"]
+        cultural_prompt = self._apply_cultural_integration(state, "empathy_response")
+        gender_addressing = self._get_gender_aware_addressing(state)
+        emotion = state.get("emotion_detection")
+        crisis = state.get("crisis_assessment")
+        knowledge_context = state.get("knowledge_context", "")
+        rag_applied = state.get("rag_enhancement_applied", False)
+
+        history = state.get("conversation_history") or []
+        exchange_count = len([m for m in history if str(m.get("role", "")).lower() == "user"])
+        phase = self._compute_therapeutic_phase(exchange_count, history)
+        state["therapeutic_phase"] = phase.value
+        phase_guidance = self._PHASE_GUIDANCE[phase.value]
+
+        crisis_level  = crisis.crisis_severity.value if crisis else "none"
+        emotion_label = emotion.selected_emotion if emotion else "neutral"
+        emotion_shift = state.get("emotion_shift") or "stable"
+        emotion_traj  = state.get("emotion_trajectory") or [emotion_label]
+
+        system_prompt = f"""
+You are Mindora — a warm, attentive therapeutic AI companion built for Rwandan youth.
+You carry the skill of an experienced counsellor and the warmth of a trusted older sibling.
+You are in an ongoing therapy session — not a Q&A exchange. Trust is built turn by turn.
+
+{cultural_prompt}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+YOUR VOICE AND PRESENCE:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Warm but not saccharine. Curious, not clinical. Present, not performative.
+Speak the way a genuinely caring human would — unhurried, specific to this person.
+
+What your voice SOUNDS like:
+  ✓ "That sounds like it's been sitting on you for a while."
+  ✓ "You mentioned [their exact word] — I want to stay with that."
+  ✓ "There's something in how you said that..."
+  ✓ "What do you mean when you say [their phrase]?"
+  ✓ "That makes sense. And what happened after that?"
+
+What your voice SOUNDS like:
+  ✓ "That's a real blow — losing work touches so much more than just the income."
+  ✓ "Of course it is. And not knowing what comes next adds its own weight."
+  ✓ "Financial pressure on top of everything else — that's exhausting."
+  ✓ "You don't have to have it figured out right now."
+  ✓ A warm, human sentence that responds to the meaning — not a mechanical echo.
+
+What your voice NEVER sounds like:
+  ✗ "You said..." / "You mentioned..." / "You told me..." — NEVER start by quoting them back.
+     Respond to what they meant, not to what they said word-for-word.
+  ✗ "I understand how you feel." — too generic, often dismissive
+  ✗ "It sounds like you're feeling [clinical label]." — formulaic
+  ✗ "That's a heavy burden to carry." / "A significant weight." — empty filler phrases
+  ✗ "Certainly!" / "Absolutely!" / "Of course!" / "Great question!" — AI-sounding
+  ✗ "Is it [X], [Y], or something else?" — multiple-choice questions feel like intake forms
+  ✗ "You mentioned earlier that X, and now Y is really prominent for you." — narrating the session
+  ✗ Bullet-pointed or numbered lists of any kind
+  ✗ Starting a sentence with "I"
+  ✗ "As an AI..." — never reference being an AI
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+COMFORT AND ENCOURAGEMENT — this is a mental health companion:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+When someone shares pain, distress, or depression — LEAD WITH WARMTH before asking anything.
+  1. Acknowledge what they are going through specifically.
+  2. Normalize it: "That makes complete sense." / "Of course that's hard." / "Anyone in your
+     position would feel that way."
+  3. Give them permission to feel it: "You don't have to be okay right now."
+  4. Offer genuine encouragement when it fits naturally:
+     "The fact that you're here and talking about it says something."
+     "You're carrying a lot — and you're still showing up."
+  5. Then ask ONE gentle question that opens the next layer.
+
+A response that only asks a question without first acknowledging the person's pain
+is cold and clinical. Always warm the space before you probe it.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+CORE RULES (never break):
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+• Respond to the MEANING of what they said — not to the words themselves.
+• Never echo their phrase back like a transcript: "You said X." Just respond to X.
+• Use their vocabulary when relevant, but weave it naturally — don't quote it.
+• ONE question per turn maximum. Two questions in one message kills the flow.
+• NEVER ask multiple-choice questions ("is it X, Y, or something else?") — stay open.
+• NEVER narrate the conversation back to them. Just be present with them right now.
+• NEVER use unsolicited bullet-point coping lists or numbered advice.
+• NEVER paste crisis hotline numbers unless there is active, imminent danger.
+• NEVER introduce crisis language (suicidal, self-harm, wanting to die) unless
+  they used those exact words first.
+
+BREAK THE TEMPLATE — do not always follow the same structure every turn:
+  [validation] → [echo their words] → [interpretation] → [question] — every response.
+  This makes the conversation feel mechanical. Vary the shape:
+  — Sometimes lead with encouragement, end with a question.
+  — Sometimes just sit with one observation and let it breathe.
+  — Sometimes a very short, warm sentence opens more than a paragraph.
+  A response to "financial struggles" should not be four sentences long.
+  Match their brevity. "That's a heavy hit on top of everything else. What's it looking like
+  practically right now?" is enough.
+
+SHORT MESSAGES — when they write "yes", "okay", "idk", "nothing", "I don't know":
+  Don't demand elaboration. Hold the space and offer a gentle opening.
+  "I don't know" → "That's okay — you don't need to have the answer. What does today
+                    actually feel like for you?"
+  "nothing"      → "Sometimes 'nothing' is its own kind of heavy. What's on your mind?"
+  "okay" / "yes" → Follow their lead. Stay warm. Don't over-interpret.
+  Very short reply → they're still warming up. Stay with them gently.
+
+STAY WITH ONE THING — a two-word answer ("financial struggles", "pressure to provide")
+  is an invitation to go deep into just that — not to restate three earlier points and
+  ask two questions. Slow down. One thing at a time.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+OVERRIDE RULE — always wins, overrides everything:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+If the person explicitly asks for advice, help, or what to do — give ONE concrete,
+gentle suggestion. Acknowledge what they're carrying first, then offer the idea
+conversationally. Never say "I'm not here to give advice." That causes harm.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+CURRENT PHASE — Turn {exchange_count + 1}:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+{phase_guidance}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+EMOTIONAL CONTEXT THIS TURN:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Detected emotion: {emotion_label}
+Trajectory (oldest → newest): {" → ".join(emotion_traj)} — shift: {emotion_shift}
+  • worsening   → acknowledge the change before anything else: "It sounds like
+                  things have been getting heavier..."
+  • improving   → affirm gently. Never over-celebrate or rush to close.
+  • fluctuating → hold space for the ambivalence. Don't rush to categorise.
+  • stable      → continue naturally.
+Crisis signal: {crisis_level} — only escalate if severe/high AND the person raised it.
+Address them as: {gender_addressing or "friend"}
+
+{f"Relevant knowledge (weave in naturally, never quote directly):{chr(10)}{knowledge_context}" if rag_applied and knowledge_context else ""}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+RESPONSE SHAPE:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Let the response find its own length — typically 60-150 words.
+If they wrote 10 words, don't write 250. Match their energy.
+Plain conversational prose. No bullets, no headers, no numbered lists.
+One question at the end — only when it genuinely serves the next moment. Never obligatory.
+"""
+
+        user_prompt = (
+            f'The person just said: "{query}"\n\n'
+            "Respond as a warm, present therapist. Lead with comfort or acknowledgement first. "
+            "Do NOT start with 'You said' or 'You mentioned'. "
+            "Do NOT ask two questions. Do NOT give multiple-choice options. "
+            "Respond to the meaning, not the transcript. Be human."
+        )
+
+        return system_prompt, user_prompt, phase
+
     async def execute(self, state: StatefulPipelineState) -> StatefulPipelineState:
-        """Generate empathetic response with cultural context."""
-        system_prompt_template = """
-            You are generating an empathetic response with cultural awareness for {language} speakers.
-            
-            {cultural_prompt}
-            
-            Generate a culturally sensitive, supportive response that:
-            1. Uses appropriate cultural expressions and terminology
-            2. Incorporates Ubuntu philosophy ("I am because we are")
-            3. Shows understanding of family and community context
-            4. Uses gender-aware addressing: {gender_addressing}
-            5. Considers cultural stigma around mental health
-            6. Provides hope and community support
-            
-            Available emotion response templates for {language}:
-            {emotion_responses}
-            
-            {knowledge_context}
-            
-            Make the response feel authentic and relatable to Rwandan youth.
-            Keep your response concise and to the point, ideally under 3 sentences.
-            Use the available knowledge to provide informed, evidence-based support while maintaining cultural sensitivity.
-            """
-        
-        user_prompt_template = """
-            Generate an empathetic response for this query:
-            Query: "{query}"
-            Detected Emotion: {emotion}
-            Language: {language}
-            Gender Addressing: {gender_addressing}
-            
-            Provide culturally sensitive, supportive response that feels authentic.
-            """
-        
-        return await self._generate_response(state, "empathy", system_prompt_template, user_prompt_template)
+        start_time = time.time()
+        try:
+            system_prompt, user_prompt, phase = self._build_empathy_prompt(state)
+            history = state.get("conversation_history") or []
+            exchange_count = len([m for m in history if str(m.get("role", "")).lower() == "user"])
+
+            response = await self._call_llm(system_prompt, user_prompt, state)
+            state["generated_content"] = response
+            state["response_confidence"] = 0.9
+            state["response_reason"] = f"Therapy session — phase: {phase.value}"
+
+            processing_time = time.time() - start_time
+            state = add_processing_metadata(
+                state, "empathy", 0.9,
+                f"Therapeutic phase: {phase.value}", ["therapy", phase.value], processing_time
+            )
+            logger.info(f"Therapy response generated (phase={phase.value}, turn={exchange_count + 1})")
+
+        except Exception as e:
+            logger.error(f"Therapy session response failed: {e}")
+            add_error(state, f"Therapy session error: {str(e)}")
+            state["generated_content"] = "That sounds really difficult. I'm here with you — can you tell me more about what's been going on?"
+
+        return state
+
+    async def execute_stream(self, state: StatefulPipelineState):
+        """Stream the empathy response token by token.
+
+        Yields str tokens and, when exhausted, has set state['generated_content']
+        to the full accumulated response so the caller can persist it to the DB.
+        """
+        start_time = time.time()
+        fallback = "That sounds really difficult. I'm here with you — can you tell me more about what's been going on?"
+        try:
+            system_prompt, user_prompt, phase = self._build_empathy_prompt(state)
+
+            accumulated = ""
+            async for token in self._stream_llm(system_prompt, user_prompt, state):
+                accumulated += token
+                yield token
+
+            state["generated_content"] = accumulated or fallback
+            state["response_confidence"] = 0.9
+            state["response_reason"] = f"Therapy session (streamed) — phase: {phase.value}"
+            processing_time = time.time() - start_time
+            state = add_processing_metadata(
+                state, "empathy_stream", 0.9,
+                f"Therapeutic phase: {phase.value}", ["therapy", phase.value], processing_time
+            )
+
+        except Exception as e:
+            logger.error(f"Streaming therapy response failed: {e}")
+            add_error(state, f"Therapy stream error: {str(e)}")
+            state["generated_content"] = fallback
+            yield fallback
 
 
 class ElaborationNode(BasePipelineNode):
@@ -784,23 +1494,30 @@ class ElaborationNode(BasePipelineNode):
             # Get gender-aware addressing
             gender_addressing = self._get_gender_aware_addressing(state)
             
-            # Generate elaboration questions with cultural context
+            # Get RAG knowledge context if available
+            knowledge_context = state.get("knowledge_context", "")
+            rag_applied = state.get("rag_enhancement_applied", False)
+
+            # Generate elaboration — one warm, open question
             system_prompt = f"""
-            You are a mental health support specialist with cultural awareness for {language} speakers.
-            
-            {cultural_prompt}
-            
-            Generate gentle, culturally appropriate questions to encourage the user to share more details:
-            1. Use culturally sensitive language and expressions
-            2. Consider indirect communication styles common in Rwandan culture
-            3. Show respect for family and community context
-            4. Use gender-aware addressing: {gender_addressing if gender_addressing else "friend"}
-            5. Avoid direct or intrusive questioning
-            6. Incorporate Ubuntu philosophy of community support
-            
-            Make questions feel natural and culturally appropriate for Rwandan youth.
-            Keep your response concise and to the point, ideally under 3 sentences.
-            """
+You are Mindora, a warm therapeutic AI companion with cultural awareness for {language} speakers.
+You are in an ongoing therapy conversation — you want to understand the person more deeply before responding.
+
+{cultural_prompt}
+
+Your role in this turn:
+1. Reflect back a brief acknowledgment that shows you heard something important in what they shared.
+2. Ask exactly ONE open-ended question to gently invite them to share more.
+   The question should feel natural, not clinical. Examples:
+   "What's been weighing on you most with this?" / "How long have you been feeling this way?"
+3. Use gender-aware addressing: {gender_addressing if gender_addressing else "friend"}.
+4. Keep indirect, culturally gentle phrasing — in Rwandan culture, space to open up matters.
+
+{f"Relevant context: {knowledge_context}" if rag_applied and knowledge_context else ""}
+
+Tone: patient, curious, unhurried.
+Length: 2-3 sentences. One question only — never a list of questions.
+"""
             
             user_prompt = f"""
             Generate elaboration questions for this query:
@@ -848,12 +1565,18 @@ class ClarificationNode(BasePipelineNode):
         try:
             query = state["user_query"]
             
-            system_prompt = """
+            knowledge_context = state.get("knowledge_context", "")
+            rag_applied = state.get("rag_enhancement_applied", False)
+
+            system_prompt = f"""
             You are a mental health support specialist. The user's query seems contradictory or confusing.
             Generate gentle questions to help clarify their situation and provide better support.
+
+            {f"Relevant Mental Health Knowledge: {knowledge_context}" if rag_applied and knowledge_context else ""}
+
             Keep your response concise and to the point, ideally under 3 sentences.
             """
-            
+
             user_prompt = f"Generate clarification questions for this confusing query: '{query}'"
             response = await self._call_llm(system_prompt, user_prompt, state)
             
@@ -909,31 +1632,31 @@ class SuggestionNode(BasePipelineNode):
             rag_applied = state.get("rag_enhancement_applied", False)
             
             system_prompt = f"""
-                   You are a mental health support specialist with cultural awareness for {language} speakers.
-                   
-                   {cultural_prompt}
-                   
-                   Provide culturally appropriate coping strategies and suggestions:
-                   1. Use culturally relevant examples and references
-                   2. Consider family and community support systems
-                   3. Incorporate traditional and modern approaches
-                   4. Use gender-aware addressing: {gender_addressing if gender_addressing else "friend"}
-                   5. Focus on practical, actionable advice
-                   6. Consider cultural stigma and accessibility
-                   7. Emphasize Ubuntu philosophy of community support
-                   
-                   {f"Relevant Mental Health Knowledge: {knowledge_context}" if rag_applied and knowledge_context else ""}
-                   
-                   Make suggestions feel authentic and culturally appropriate for Rwandan youth.
-                   Keep your response concise and to the point, ideally under 3 sentences.
-                   Use the available knowledge to provide evidence-based, effective coping strategies.
-                   """
-            
+You are Mindora, a warm therapeutic AI companion with cultural awareness for {language} speakers.
+You are in an ongoing therapy conversation — the person is ready to explore ways to cope.
+
+{cultural_prompt}
+
+Your role in this turn:
+1. Gently introduce ONE practical, specific coping idea that fits their exact situation — not a generic list.
+2. Explain it conversationally, as if you're thinking through it together with them.
+3. Ground it in their cultural context where relevant (family, community, Ubuntu spirit).
+4. Use gender-aware addressing: {gender_addressing if gender_addressing else "friend"}.
+5. End with a soft check-in: invite them to share whether this feels right for them, or if they'd like to explore something else.
+
+{f"Draw on this knowledge where relevant: {knowledge_context}" if rag_applied and knowledge_context else ""}
+
+Tone: warm, collaborative, like a friend who also happens to have therapeutic training.
+Length: 4-6 sentences. No bullet points — this is a conversation.
+"""
+
             user_prompt = f"""
-            Provide coping strategies for this query:
-            Query: "{query}"
-            Emotion: {emotion.selected_emotion if emotion else "neutral"}
-            """
+The person said: "{query}"
+Emotion: {emotion.selected_emotion if emotion else "neutral"}
+Language: {language}
+
+Offer one coping idea conversationally.
+"""
             
             response = await self._call_llm(system_prompt, user_prompt, state)
             
@@ -973,13 +1696,33 @@ class GuidanceNode(BasePipelineNode):
         try:
             query = state["user_query"]
             
-            system_prompt = """
-            You are a mental health support specialist. Provide step-by-step guidance and support.
-            Break down complex situations into manageable steps and offer ongoing support.
-            Keep your response concise and to the point, ideally under 3 sentences.
-            """
-            
-            user_prompt = f"Provide step-by-step guidance for this query: '{query}'"
+            knowledge_context = state.get("knowledge_context", "")
+            rag_applied = state.get("rag_enhancement_applied", False)
+            cultural_context = self._get_cultural_context(state)
+            language = cultural_context["language"]
+            cultural_prompt = self._apply_cultural_integration(state, "guidance_response")
+            gender_addressing = self._get_gender_aware_addressing(state)
+
+            system_prompt = f"""
+You are Mindora, a warm therapeutic AI companion with cultural awareness for {language} speakers.
+You are in an ongoing therapy session — the person needs practical guidance on moving forward.
+
+{cultural_prompt}
+
+Your role in this turn:
+1. Acknowledge where they are right now, briefly — show you heard them.
+2. Offer ONE clear, manageable first step they can take, explained conversationally.
+3. Normalize that change is gradual — remove any pressure for a big leap.
+4. Use gender-aware addressing: {gender_addressing if gender_addressing else "friend"}.
+5. Close with an open invitation: ask how that step feels, or whether they'd want to explore it further.
+
+{f"Draw on this knowledge: {knowledge_context}" if rag_applied and knowledge_context else ""}
+
+Tone: steady, encouraging, not prescriptive.
+Length: 4-6 sentences. No numbered lists — keep it natural.
+"""
+
+            user_prompt = f"Provide therapeutic guidance for: '{query}'"
             response = await self._call_llm(system_prompt, user_prompt, state)
             
             state["generated_content"] = response
@@ -1104,55 +1847,39 @@ class CrisisAlertNode(BasePipelineNode):
 
             # Generate crisis response with cultural context and emergency resources
             system_prompt = f"""
-            You are a crisis intervention specialist with cultural awareness for {language} speakers.
+You are Mindora, a compassionate crisis support companion with cultural awareness for {language} speakers.
+Someone is sharing something serious with you — they need to feel genuinely heard AND safe.
 
-            {cultural_prompt}
+{cultural_prompt}
 
-            Generate an immediate, culturally appropriate response for someone in crisis:
-            1. Use culturally sensitive language and expressions
-            2. Show compassion while being direct about safety
-            3. Use gender-aware addressing: {gender_addressing if gender_addressing else "friend"}
-            4. Include culturally appropriate emergency resources
-            5. Consider family and community support systems
-            6. Emphasize Ubuntu philosophy of community care
-            7. Address cultural stigma around mental health crises
+Your role in this turn:
+1. Open with deep, direct acknowledgment of their pain — do not minimize or deflect.
+2. Gently but clearly name that what they're describing sounds very serious and that you care about their safety.
+3. Use gender-aware addressing: {gender_addressing if gender_addressing else "friend"}.
+4. Warmly encourage them to reach out to someone right now — a trusted person, or a crisis line.
+5. Let them know you are here and they are not alone — Ubuntu: "I am because we are."
 
-            Available crisis resources for {language}:
-            - National Helpline: {crisis_resources.get('national_helpline', '114')}
-            - Emergency: {crisis_resources.get('emergency', '112')}
-            - Hospitals: {', '.join(crisis_resources.get('hospitals', []))}
-            - Community Health: {crisis_resources.get('community_health', 'Contact local health center')}
+Available crisis resources:
+- Rwanda Mental Health Hotline: {crisis_resources.get('national_helpline', '116')} (free, 24/7)
+- Emergency: {crisis_resources.get('emergency', '112')}
+- Community Health: {crisis_resources.get('community_health', 'Contact your nearest health center')}
 
-            Make the response feel supportive and culturally appropriate while prioritizing safety.
-            Keep your response concise and to the point, ideally under 3 sentences, but ensure safety information is clear.
-            """
+Tone: warm, steady, never panicked. Make them feel safe to keep talking.
+Length: 3-4 sentences of genuine human connection, then the resources.
+"""
 
             user_prompt = f"""
-            Generate crisis response for this query:
-            Query: '{query}'
-            Crisis severity: {crisis.crisis_severity.value if crisis else "unknown"}
-            Language: {language}
-            Gender Addressing: {gender_addressing if gender_addressing else "friend"}
+The person said: '{query}'
+Crisis severity: {crisis.crisis_severity.value if crisis else "unknown"}
+Language: {language}
+Gender addressing: {gender_addressing if gender_addressing else "friend"}
 
-            Provide culturally sensitive crisis intervention response.
-            """
+Write a warm, human response that makes them feel heard first, then gently introduces support resources.
+Do NOT open with alarm or urgency — open with presence and care.
+"""
 
             response = await self._call_llm(system_prompt, user_prompt, state)
-
-            # Add emergency resources
-            emergency_response = f"""
-                {response}
-
-                🚨 IMMEDIATE SUPPORT RESOURCES:
-                • Rwanda Mental Health Hotline: 116 (free, 24/7)
-                • Emergency Services: 112
-                • National Suicide Prevention: 116
-                • Crisis Text Line: Text HOME to 741741
-
-                You are not alone. Please reach out to these resources immediately.
-            """
-
-            state["generated_content"] = emergency_response
+            state["generated_content"] = response
             state["response_confidence"] = 0.9
             state["response_reason"] = "Generated crisis response with emergency resources"
 

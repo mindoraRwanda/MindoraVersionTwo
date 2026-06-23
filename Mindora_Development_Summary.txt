@@ -1,0 +1,616 @@
+================================================================================
+  MINDORA v2 — COMPLETE DEVELOPMENT SUMMARY
+  Mental Health Chatbot for Rwandan Youth
+  Prepared for internal review meeting | June 2026
+================================================================================
+
+
+================================================================================
+  1. WHAT IS MINDORA?
+================================================================================
+
+Mindora is an AI-powered mental health companion designed specifically for
+Rwandan youth. It provides a safe, private space for emotional support through
+a text (and voice) conversation interface. The system is culturally aware,
+therapeutically grounded, and crisis-sensitive.
+
+Tech stack:
+  - Backend:        Python, FastAPI, LangGraph, SQLAlchemy, PostgreSQL
+  - AI:             Groq LLM (llama-3.3-70b-versatile), local HuggingFace
+                    emotion classifier, Qdrant vector database
+  - Frontend:       React (JavaScript), custom CSS
+  - Infrastructure: JWT authentication, SSE streaming, background tasks
+
+
+================================================================================
+  2. ARCHITECTURE OVERVIEW
+================================================================================
+
+Pipeline Flow (per message)
+----------------------------
+
+  User Message
+       |
+       v
+  [EmotionDetectionNode]   <-- local HuggingFace model, no LLM cost
+       |                       detects emotion + language + trajectory
+       v
+  [UnifiedAnalysisNode]    <-- 1 LLM call
+       |                       classifies query type + crisis severity
+       v
+    Routing Decision
+       |
+       +--- Off-topic / greeting ------> [GenerateResponseNode]
+       |
+       +--- Crisis (severe/high) -------> [CrisisAlertNode] --> [GenerateResponseNode]
+       |                                   logs to DB + emails therapist
+       |
+       +--- Mental health -------------> [RAGEnhancementNode] (if Qdrant available)
+                                               |
+                                               v
+                                         [EmpathyNode]    <-- 1 LLM call (streamed)
+                                               |
+                                               v
+                                        [GenerateResponseNode]
+                                               |
+                                               v
+                                         Response to user
+
+KEY ACHIEVEMENT: Reduced from 5-6 LLM calls per message down to 2 LLM calls
+per message — responses are faster and the running cost is significantly lower.
+
+
+================================================================================
+  3. PIPELINE RESTRUCTURE
+================================================================================
+
+3.1 Unified Analysis Node
+--------------------------
+Previously the pipeline had 5 separate nodes each making their own LLM call:
+  - Query Validation Node
+  - Crisis Detection Node
+  - Query Evaluation Node
+  - Elaboration Node
+  - Suggestion Node
+
+All of these were consolidated into ONE UnifiedAnalysisNode that makes a single
+structured LLM call and returns:
+  - Query type (mental health / greeting / casual / random / unclear)
+  - Crisis assessment (severity: none / low / medium / high / severe + confidence)
+  - Keywords that triggered the assessment
+
+Impact: 3-4 fewer LLM calls per message. Faster responses, lower API costs.
+
+
+3.2 Single Routing Function
+-----------------------------
+The old code had 5-6 separate routing functions with overlapping logic. These
+were replaced with a single _route_after_unified_analysis() function that makes
+one clean decision:
+
+  1. Off-topic or greeting       --> quick conversational reply
+  2. Genuine crisis (high/severe)--> crisis alert flow
+  3. Everything else             --> therapy session (with RAG if available)
+
+
+3.3 Conversation History Limit Increased
+-----------------------------------------
+The number of recent messages loaded for context was increased from 15 to 20
+messages, giving the bot better memory of what was said earlier in longer
+conversations.
+
+
+================================================================================
+  4. CHATBOT BEHAVIOUR & SAFETY RULES
+================================================================================
+
+This was a major focus area. Several problems were identified through real
+conversation testing and fixed by adding explicit rules into the bot's system
+prompt.
+
+
+4.1 Problem: Bot Refusing Advice When User Explicitly Asked
+------------------------------------------------------------
+WHAT WAS HAPPENING:
+A user first told the bot they wanted to hurt themselves. The bot correctly
+entered a supportive mode. In the very next message, the user said "give me
+some advice". The bot responded with:
+
+    "I'm not here to offer advice just yet, friend..."
+
+This is harmful — when someone in distress explicitly asks for help, the bot
+should give it, not deflect.
+
+ROOT CAUSE: The OPENING phase had an absolute rule: "Do NOT offer advice".
+This rule was applied even when the user directly asked.
+
+FIX — THE OVERRIDE RULE:
+An override rule was added at the top of the system prompt that takes priority
+over all phase guidance:
+
+    "If the person explicitly asks for advice, help, or what to do
+    (e.g. 'what should I do?', 'can you give me advice?', 'how do I cope?',
+    'help me'), you MUST give them ONE concrete, gentle suggestion — do NOT
+    say 'I'm not here to give advice' or deflect. Refusing to help when
+    someone directly asks is harmful, especially in distress."
+
+RESULT: The bot now always gives one concrete, gentle suggestion when directly
+asked — regardless of which phase the conversation is in.
+
+
+4.2 Problem: Bot Introducing Crisis Language Unprompted
+--------------------------------------------------------
+WHAT WAS HAPPENING:
+After a user mentioned suicidal ideation, subsequent bot responses kept using
+words like "suicidal thoughts," "self-harm," and "wanting to die" — even when
+the conversation had moved on to other topics. This could re-traumatise users
+or plant ideas that weren't in their head.
+
+FIX — THE LANGUAGE REFLECTION RULE:
+A hard rule was added to the system prompt:
+
+    "NEVER introduce crisis language (suicidal thoughts, self-harm, wanting
+    to die) unless the person used those exact words first. Only reflect
+    language they gave you."
+
+RESULT: The bot only echoes back the specific words a user used. It never
+escalates the emotional weight of a conversation unprompted.
+
+
+4.3 Therapeutic Session Arc (5 Phases)
+----------------------------------------
+Previously the bot had no sense of where it was in a conversation — it responded
+identically to message 1 and message 20. A five-phase therapeutic arc was
+implemented:
+
+  Phase       When        What the Bot Does
+  ----------  ----------  -------------------------------------------------------
+  OPENING     Turns 1-2   Build safety. Reflect what was said. Ask ONE open
+                          question. No unsolicited advice.
+  EXPLORING   Turns 3-5   Go deeper. Explore context, relationships, history.
+                          Name recurring themes.
+  REFLECTING  Turns 6-8   Mirror patterns back tentatively. "It sounds like this
+                          might be about more than just X..."
+  WORKING     Turns 9-12  Gentle action. Offer one coping idea at a time. May
+                          suggest professional support.
+  CLOSING     Turn 13+    Consolidate. Name one small next step. Leave the person
+                          with a sense of agency.
+
+DISTRESS SLOWDOWN: If the user is expressing heavy emotions across multiple
+turns, the phase advances one turn later — the bot doesn't rush through phases
+when someone is still processing.
+
+The phase is computed mathematically from the exchange count — no extra LLM
+call is needed.
+
+
+4.4 Session Memory & Context Compression
+------------------------------------------
+Previously either the bot had no memory (stateless) or we sent the entire
+conversation history with every message (expensive and slow).
+
+A smart compression system was built:
+  - The last 4 messages are sent verbatim to the LLM (full detail)
+  - Older turns are compressed into a short narrative:
+      "Turn 1 (user): I've been feeling anxious about school...
+       Turn 2 (user): My parents don't understand me..."
+  - Bot turns are omitted from the summary (user's words matter most)
+
+RESULT: The bot remembers the whole conversation at a fraction of the token cost.
+
+
+4.5 Emotion Trajectory Tracking
+---------------------------------
+The bot now tracks how the user's emotional state is changing across turns,
+not just what they feel right now.
+
+The local emotion classifier is run on the last 3 historical user messages,
+and a trajectory is derived:
+
+  Trajectory   What it means              Bot response
+  -----------  -------------------------  -------------------------------------------
+  Worsening    More negative over time    Acknowledges: "It sounds like things have
+                                          been getting harder..."
+  Improving    Less negative over time    Gentle affirmation, no over-celebrating
+  Fluctuating  Unpredictable shifts       Holds space for ambivalence, no rush to label
+  Stable       Consistent emotional state Continues naturally
+
+This makes the bot feel like it is actually paying attention to how someone is
+doing over time.
+
+
+4.6 Multi-Turn Crisis Detection
+---------------------------------
+Single-message crisis detection only catches explicit statements like "I want
+to die." But users often escalate gradually. A multi-turn distress trajectory
+system was added:
+
+THREE DISTRESS TIERS:
+  - Tier 1 (mild):     sad, anxious, stressed, lonely, worried, overwhelmed...
+  - Tier 2 (moderate): hopeless, worthless, can't cope, trapped, breaking down,
+                       hate myself...
+  - Tier 3 (severe):   want to die, kill myself, end my life, better off dead,
+                       hurting myself...
+
+PATTERN DETECTION:
+  - If distress escalates across turns (Tier 1 -> Tier 2 -> Tier 3), the system
+    upgrades the crisis severity
+  - The system NEVER downgrades — it always errs on the side of safety
+  - This catches users who are slowly spiralling even if no single message is
+    explicitly alarming
+
+
+================================================================================
+  5. CRISIS SAFETY SYSTEM
+================================================================================
+
+When a high/severe crisis is detected (single message or multi-turn escalation):
+
+STEP 1 — Log to database:
+The crisis_logs table receives a full record:
+  - Crisis type (suicide ideation, self-harm, substance abuse, etc.)
+  - Severity level and confidence score
+  - Excerpt of the user's message (up to 1000 characters)
+  - LLM rationale for the assessment
+  - Which classifier model was used
+  - Timestamp
+
+STEP 2 — Notify assigned therapist by email:
+If the user has a therapist assigned in the system:
+  - Sends an urgent email with patient name, crisis type, severity, message excerpt
+  - Includes a direct link to the case in the admin dashboard
+  - The crisis log is updated to status = notified
+
+STEP 3 — Bot responds warmly:
+  - Acknowledges the user's pain directly, without minimising it
+  - Names that what they are sharing sounds serious and their safety matters
+  - Provides culturally appropriate emergency contact information
+  - Uses gender-aware addressing (brother/sister/friend in EN, FR, and Kinyarwanda)
+
+
+================================================================================
+  6. LANGUAGE & CULTURAL INTELLIGENCE
+================================================================================
+
+6.1 Automatic Language Detection
+----------------------------------
+The system detects the language of each message automatically using langdetect.
+Three languages are supported:
+
+  Code  Language     Context
+  ----  -----------  ------------------------------------------
+  en    English      Default
+  fr    French       Francophone Rwandan users
+  rw    Kinyarwanda  Rwandan mother-tongue speakers
+
+Once detected, the entire system prompt switches to that language — therapeutic
+tone, cultural context, gender addressing, and crisis resources all adapt
+simultaneously.
+
+
+6.2 Cultural Context & Gender Addressing
+-----------------------------------------
+Gender-aware terms of address in all three languages:
+
+  Gender                  English  French  Kinyarwanda
+  ----------------------  -------  ------  -----------
+  Male                    brother  frere   murumuna
+  Female                  sister   soeur   mushiki
+  Other / prefer not say  friend   ami     mugenzi
+
+Rwanda-specific crisis resources are injected into responses when relevant.
+Cultural emotional expression patterns are recognised by the local emotion
+classifier.
+
+
+6.3 RAG Knowledge Base (Qdrant)
+---------------------------------
+A Qdrant vector database stores mental health knowledge. When the bot processes
+a mental health message, it searches for relevant content and weaves it
+naturally into the response — never quoting directly, just drawing on it.
+
+The retrieval threshold was raised from 0.3 to 0.5 — only genuinely relevant
+content gets injected. This stopped the bot from including loosely related
+content that was steering responses off-topic.
+
+
+================================================================================
+  7. BACKEND IMPROVEMENTS
+================================================================================
+
+7.1 Conversation Title Generation
+-----------------------------------
+After the first exchange in any new conversation, the system automatically
+generates a 4-6 word title in the background using a separate LLM call:
+
+  Examples:
+    - "Grief after losing a parent"
+    - "Anxiety about the future"
+    - "Struggling with loneliness"
+
+  - Stored inside the conversation's existing meta JSON field
+    (no database migration needed)
+  - Displayed in the sidebar so users can recognise past conversations
+
+
+7.2 Real-Time Response Streaming (SSE)
+----------------------------------------
+The single biggest UX improvement. Previously, users stared at a blank screen
+for 2-3 seconds. Now:
+
+  - A new endpoint POST /auth/messages/stream returns a Server-Sent Events stream
+  - The Groq LLM streams tokens in real time via LangChain's .astream() method
+  - Each token arrives at the browser as it is generated
+  - The bot message bubble fills in word by word — feels instant and alive
+  - Time to first visible word: ~300-500ms  (was 2-3 seconds)
+
+HOW IT WAS BUILT:
+  1. ChatGroqProvider.astream_text()     -- opens a streaming connection to Groq
+  2. EmpathyNode.execute_stream()        -- yields tokens, same therapeutic prompt
+  3. process_query_stream()              -- runs analysis nodes, then streams
+  4. Fresh DB session inside generator  -- avoids FastAPI/SQLAlchemy lifecycle bug
+
+BUG ENCOUNTERED AND FIXED:
+FastAPI closes the get_db() session when StreamingResponse is returned — before
+the generator body runs. All SQLAlchemy objects become detached (DetachedInstanceError).
+Fix: extract plain Python UUID values before returning, then open a fresh
+SessionLocal() inside the generator for all database writes.
+
+
+7.3 Per-User Rate Limiting
+---------------------------
+To prevent abuse and protect the LLM budget:
+  - 20 messages per minute per user (sliding-window algorithm)
+  - No new dependencies — implemented in-memory using Python's collections.deque
+  - Returns HTTP 429 with a Retry-After header when exceeded
+  - Applied to both the regular and streaming message endpoints
+
+
+7.4 Crisis Event Persistence
+------------------------------
+The CrisisAlertNode persists every crisis event to the crisis_logs table
+automatically. Full audit trail: type, severity, confidence, message excerpt,
+LLM rationale, model name, therapist notified, and status.
+
+
+================================================================================
+  8. FRONTEND IMPROVEMENTS
+================================================================================
+
+8.1 Delete Conversation — Custom Modal
+----------------------------------------
+Users previously had no way to delete a conversation. A delete button was added
+to each sidebar item, with a polished confirmation modal:
+  - Custom modal with a blurred overlay and slide-up animation
+    (not the browser's default alert box)
+  - Shows the conversation label so the user knows what they are deleting
+  - Cancel and Delete buttons, both disabled while deletion is in progress
+  - Pressing Escape closes the modal
+
+
+8.2 Sidebar Layout — Fixed Structure
+--------------------------------------
+The sidebar now has a proper fixed layout regardless of how many conversations exist:
+  - Logout button pinned to the bottom — always visible
+  - Chat list scrollable in the middle — never pushes logout off-screen
+  - Custom thin scrollbar styling
+  - Fixed a nested <div> bug where the sidebar container was doubled, causing
+    the inner element to inherit height: 100vh twice
+
+
+8.3 Date Grouping in Sidebar
+------------------------------
+Conversations are now grouped by date with clear labels:
+  - Today / Yesterday / full date (e.g. "June 15, 2026") for older chats
+  - Each group has a styled label in small caps above its conversations
+
+
+8.4 AI-Generated Conversation Titles in Sidebar
+-------------------------------------------------
+When an AI title has been generated for a conversation, it is shown in the sidebar:
+  - Falls back to the first message preview (22 characters) if no title exists
+  - Falls back to "New conversation" if the chat has no messages yet
+
+
+8.5 Welcome Screen Persistence
+--------------------------------
+The welcome screen now correctly reappears in three situations where it
+previously got stuck:
+  - After clicking New Chat
+  - After deleting the currently open chat
+  - When selecting a chat that has no messages
+
+
+8.6 Animated Typing Indicator
+-------------------------------
+The plain text "Mindora is typing..." was replaced with a professional
+three-dot bouncing animation:
+  - Three dots bounce in sequence with a staggered 0.18s delay
+  - Black in light mode, white in dark mode — visible on any background
+  - The indicator disappears the instant the first streaming token arrives,
+    replaced by the growing bot message bubble
+
+
+8.7 Clickable Suggestion Chips
+--------------------------------
+The welcome screen shows three starter suggestions. These were previously
+decorative. They are now interactive buttons:
+  - Clicking fills the text input with a pre-formed opener
+    (e.g. "I'd like to talk about your day")
+  - The input is automatically focused so the user can edit or send immediately
+  - Hover effect (purple tint) makes them discoverable
+
+
+8.8 Textarea Auto-Resize
+--------------------------
+The message input box now grows as the user types:
+  - Starts at one line (44px)
+  - Expands up to six lines (120px) as content grows
+  - Shrinks back to one line automatically after sending
+  - No library needed — uses the browser's native scrollHeight
+
+
+8.9 Dark Mode
+--------------
+A moon/sun toggle button in the top-right of the header switches between
+light and dark mode:
+  - Preference is saved to localStorage and survives page refresh
+  - Dark mode covers: background, header, message bubbles, input bar,
+    mic button, typing dots
+  - The sidebar stays its natural dark purple in both modes
+  - Smooth toggle via CSS class .chat-dashboard.dark
+
+
+8.10 Message Timestamps on Hover
+----------------------------------
+Timestamps are now hidden by default and appear on hover:
+  - Opacity fades from 0 to 1 when hovering over a message
+  - Keeps the chat interface clean — timestamps appear only when needed
+  - 0.18s smooth transition
+
+
+================================================================================
+  9. BUG FIXES SUMMARY
+================================================================================
+
+  #  Bug                              What went wrong
+  -  --------------------------------  -----------------------------------------
+  1  Bot refused advice when asked     OPENING phase had absolute "no advice"
+                                       rule blocking even direct requests
+     Fix: Added OVERRIDE RULE — must give one suggestion when user explicitly asks
+
+  2  Bot introduced crisis language    Bot echoed back "suicidal thoughts" etc.
+     unprompted                        even in later unrelated turns
+     Fix: Added hard rule — never introduce crisis language unless user said
+          it first
+
+  3  SSE streaming crashed with        FastAPI closes get_db() session before
+     DetachedInstanceError             the async generator runs
+     Fix: Extract plain UUIDs before generator starts; open fresh SessionLocal()
+          inside generator
+
+  4  Delete button invisible           opacity: 0 — users had no way to find it
+     Fix: Changed to opacity: 0.45 at rest, opacity: 1 on hover
+
+  5  Sidebar broken layout             Sidebar.jsx wrapped content in
+                                       <div className="sidebar"> which nested
+                                       inside another .sidebar in ChatDashboard
+     Fix: Changed Sidebar.jsx to return a React Fragment
+
+  6  Welcome screen stuck after        hasStartedChat was a one-way latch —
+     navigation                        once true, never reset
+     Fix: setHasStartedChat(false) called in handleNewChat() and after delete
+
+  7  Typing dots invisible in          Dots were white on a white/grey bot
+     light mode                        bubble background
+     Fix: Dark (#374151) in light mode, light (#e5e7eb) in dark mode
+
+
+================================================================================
+  10. DATABASE & DATA MODEL
+================================================================================
+
+No new database migrations were required. All new features fit within the
+existing schema:
+
+  Table           What it stores
+  --------------  -----------------------------------------------------------
+  users           Auth credentials, gender (used for cultural addressing)
+  conversations   Chat sessions; meta JSON field stores AI-generated title
+  messages        Every user and bot message
+  emotion_logs    Per-message emotion detection results for analytics
+  crisis_logs     Full audit trail for every crisis event detected
+  therapists      Therapist directory for crisis notifications
+  user_therapists Which therapist is assigned to which user
+
+
+================================================================================
+  11. FULL CAPABILITY SUMMARY
+================================================================================
+
+  Capability                                          Status
+  --------------------------------------------------  ---------
+  Multi-turn therapeutic conversation                 Working
+  5-phase therapeutic arc (OPENING to CLOSING)        Working
+  Session memory with context compression             Working
+  Emotion detection (local model, no LLM cost)        Working
+  Emotion trajectory tracking across turns            Working
+  Crisis detection — single message                   Working
+  Crisis detection — multi-turn escalation            Working
+  Crisis logging to database (full audit trail)       Working
+  Therapist email notification on crisis              Working
+  Bot safety rules (advice + language reflection)     Working
+  RAG-enhanced responses (Qdrant, threshold 0.5)      Working
+  Real-time token streaming via SSE                   Working
+  Language auto-detection (EN / FR / Kinyarwanda)     Working
+  Cultural context & gender-aware addressing          Working
+  Conversation title generation (background task)     Working
+  Per-user rate limiting (20 messages / minute)       Working
+  Voice message support (speech-to-text pipeline)     Working
+  Delete conversation with confirmation modal         Working
+  Sidebar date grouping & fixed layout                Working
+  Animated typing indicator                           Working
+  Clickable suggestion chips on welcome screen        Working
+  Textarea auto-resize                                Working
+  Dark mode (persisted preference)                    Working
+  Message timestamps on hover                         Working
+  Mobile responsive layout                            Working
+
+
+================================================================================
+  12. KNOWN GAPS BEFORE OPEN USER TESTING
+================================================================================
+
+  Priority  Gap                                    Recommended Fix
+  --------  -------------------------------------  ----------------------------
+  HIGH      Rate limit 429 error is silent on the  Show a toast: "Please wait
+            frontend — user sees nothing            X seconds before sending"
+
+  HIGH      Streaming endpoint does not save an    Copy emotion log insertion
+            EmotionLog entry                       from the regular endpoint
+
+  MEDIUM    Kinyarwanda detection unreliable for   Add a Kinyarwanda keyword
+            short messages (under ~10 words)       pre-check before langdetect
+
+  LOW       Rate limiter resets on server restart  Replace with Redis for prod
+
+  LOW       JWT expiry silently fails with 401     Add global fetch interceptor
+                                                   that redirects to login page
+
+  LOW       WelcomeScreen suggestions array is     Move array outside component
+            recreated on every render              or wrap in useMemo
+
+
+================================================================================
+  13. RECOMMENDED NEXT STEPS
+================================================================================
+
+  1. CLOSED BETA (5-10 users)
+     Focus on streaming reliability, therapeutic conversation quality, and
+     crisis detection accuracy in real conversations.
+
+  2. KINYARWANDA CONTENT
+     Expand the RAG knowledge base and refine system prompts with
+     Rwandan-specific mental health language and cultural norms.
+
+  3. ADMIN DASHBOARD FOR THERAPISTS
+     The crisis logs, emotion logs, and conversation data are all in the
+     database — a dashboard to surface this is the natural next build.
+
+  4. ANALYTICS
+     Connect emotion_logs and crisis_logs to charts showing user wellbeing
+     trends over time.
+
+  5. REDIS RATE LIMITING
+     For multi-server production deployment, replace the in-memory rate limiter.
+
+  6. KINYARWANDA SYSTEM PROMPTS
+     Currently detection switches the language label but the full prompt quality
+     in Kinyarwanda still needs native-speaker review.
+
+
+================================================================================
+  Mindora v2 — Built with FastAPI, LangGraph, Groq (llama-3.3-70b), React
+  Therapeutic conversation logic, crisis safety, and cultural context designed
+  for Rwandan youth mental health support.
+================================================================================

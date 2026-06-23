@@ -1,0 +1,124 @@
+/* ── Overlay ── */
+.dcm-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  animation: dcm-fade-in 0.15s ease;
+}
+
+@keyframes dcm-fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+/* ── Card ── */
+.dcm-card {
+  background: #ffffff;
+  border-radius: 16px;
+  padding: 32px 28px 24px;
+  width: 100%;
+  max-width: 380px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.18), 0 4px 16px rgba(0, 0, 0, 0.1);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  animation: dcm-slide-up 0.18s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes dcm-slide-up {
+  from { transform: translateY(24px) scale(0.96); opacity: 0; }
+  to   { transform: translateY(0)    scale(1);    opacity: 1; }
+}
+
+/* ── Icon ── */
+.dcm-icon {
+  font-size: 2.5rem;
+  margin-bottom: 16px;
+  background: rgba(239, 68, 68, 0.08);
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ── Text ── */
+.dcm-title {
+  font-size: 1.125rem;
+  font-weight: 700;
+  color: #111827;
+  margin: 0 0 10px;
+}
+
+.dcm-body {
+  font-size: 0.9rem;
+  color: #6b7280;
+  line-height: 1.55;
+  margin: 0 0 28px;
+}
+
+.dcm-label {
+  font-weight: 600;
+  color: #374151;
+}
+
+/* ── Buttons ── */
+.dcm-actions {
+  display: flex;
+  gap: 12px;
+  width: 100%;
+}
+
+.dcm-cancel,
+.dcm-confirm {
+  flex: 1;
+  padding: 11px 0;
+  border-radius: 10px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border: none;
+}
+
+.dcm-cancel {
+  background: #f3f4f6;
+  color: #374151;
+  border: 1px solid #e5e7eb;
+}
+
+.dcm-cancel:hover:not(:disabled) {
+  background: #e5e7eb;
+}
+
+.dcm-confirm {
+  background: #ef4444;
+  color: #ffffff;
+}
+
+.dcm-confirm:hover:not(:disabled) {
+  background: #dc2626;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(239, 68, 68, 0.35);
+}
+
+.dcm-cancel:disabled,
+.dcm-confirm:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+/* ── Responsive ── */
+@media (max-width: 480px) {
+  .dcm-card {
+    margin: 0 16px;
+    padding: 24px 20px 20px;
+  }
+}

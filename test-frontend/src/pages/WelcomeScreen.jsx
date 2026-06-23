@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 
 // WelcomeScreen Component for displaying the initial welcome interface
-const WelcomeScreen = () => {
+const WelcomeScreen = ({ onSuggestionClick }) => {
   const [showPrompt, setShowPrompt] = useState(false);
   const [visibleSuggestions, setVisibleSuggestions] = useState([]);
 
@@ -58,16 +58,16 @@ const WelcomeScreen = () => {
           <p className="suggestions-intro">Whether you want to:</p>
           <div className="suggestions-list">
             {suggestions.map((suggestion, index) => (
-              <div
+              <button
                 key={index}
                 className={`suggestion-item ${visibleSuggestions.includes(index) ? 'suggestion-visible' : ''}`}
-                style={{
-                  transitionDelay: `${index * 0.1}s`
-                }}
+                style={{ transitionDelay: `${index * 0.1}s` }}
+                onClick={() => onSuggestionClick && onSuggestionClick(`I'd like to ${suggestion.text}`)}
+                type="button"
               >
                 <span className="suggestion-icon">{suggestion.icon}</span>
                 <span className="suggestion-text">{suggestion.text}</span>
-              </div>
+              </button>
             ))}
           </div>
           <p className="suggestions-outro">—I've got you.</p>

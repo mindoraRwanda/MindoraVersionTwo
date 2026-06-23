@@ -98,32 +98,26 @@ class UnifiedRAGService:
     def _init_qdrant_client(self):
         """Initialize Qdrant client with settings integration."""
         try:
-            # Start with HTTP by default for local development
-            qdrant_config = {
-                "host": settings.qdrant.qdrant_host,
-                "port": settings.qdrant.qdrant_port,
-                "https": False  # Default to HTTP
-            }
-            if settings.qdrant.qdrant_api_key:
-                qdrant_config["api_key"] = settings.qdrant.qdrant_api_key
+            host = settings.qdrant.qdrant_host
+            port = settings.qdrant.qdrant_port
+            api_key = settings.qdrant.qdrant_api_key
 
-            # Try HTTP first (most common for local Qdrant)
-            try:
-                self.qdrant_client = QdrantClient(**qdrant_config)
-                logger.info(f"🔗 Connected to Qdrant via HTTP at {settings.qdrant.qdrant_host}:{settings.qdrant.qdrant_port}")
-            except Exception as http_error:
-                # If HTTP fails, try HTTPS
-                logger.warning(f"HTTP connection failed, trying HTTPS: {http_error}")
-                qdrant_config["https"] = True
-                try:
-                    self.qdrant_client = QdrantClient(**qdrant_config)
-                    logger.info(f"🔗 Connected to Qdrant via HTTPS at {settings.qdrant.qdrant_host}:{settings.qdrant.qdrant_port}")
-                except Exception as https_error:
-                    logger.error(f"Both HTTP and HTTPS failed. HTTP: {http_error}, HTTPS: {https_error}")
-                    raise https_error
+            # Cloud hosts (non-localhost) always require HTTPS.
+            # Local Docker/bare-metal instances use plain HTTP.
+            is_local = host in ("localhost", "127.0.0.1", "0.0.0.0")
+            use_https = not is_local
+
+            self.qdrant_client = QdrantClient(
+                host=host,
+                port=port,
+                https=use_https,
+                api_key=api_key if api_key else None,
+            )
+            scheme = "HTTPS" if use_https else "HTTP"
+            logger.info(f"Connected to Qdrant via {scheme} at {host}:{port}")
 
         except Exception as e:
-            logger.error(f"❌ Failed to connect to Qdrant: {e}")
+            logger.error(f"Failed to connect to Qdrant: {e}")
             raise
     
     def _init_embedding_model(self):
@@ -343,18 +337,19 @@ class UnifiedRAGService:
             
             # Use cached encoding
             query_vector = list(self._encode_query(query))
-            
-            # Search with optimized parameters
-            results = self.qdrant_client.search(
+
+            # query_points is the current API (qdrant-client >= 1.7; .search() removed in 1.18)
+            response = self.qdrant_client.query_points(
                 collection_name=self.collection_name,
-                query_vector=query_vector,
+                query=query_vector,
                 limit=top_k,
                 search_params=SearchParams(
-                    hnsw_ef=64,  # Optimized for speed
-                    exact=False  # Use approximate search
+                    hnsw_ef=64,
+                    exact=False
                 )
             )
-            
+            results = response.points
+
             # Format results
             formatted_results = []
             for point in results:
@@ -408,12 +403,10 @@ class UnifiedRAGService:
             
             return {
                 "name": self.collection_name,
-                "vectors_count": collection_info.vectors_count,
-                "indexed_vectors_count": collection_info.indexed_vectors_count,
-                "points_count": collection_info.points_count,
-                "status": collection_info.status,
-                "optimizer_status": collection_info.optimizer_status,
-                "payload_schema": collection_info.payload_schema
+                "vectors_count": getattr(collection_info, "vectors_count", None)
+                    or getattr(collection_info, "points_count", 0),
+                "points_count": getattr(collection_info, "points_count", 0),
+                "status": str(getattr(collection_info, "status", "unknown")),
             }
             
         except Exception as e:

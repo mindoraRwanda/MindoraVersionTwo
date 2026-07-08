@@ -29,9 +29,9 @@ class RAGEnhancementNode:
         self.logger = logger
         
         # Configuration
-        self.max_retrieved_chunks = 5
-        self.min_relevance_score = 0.5
-        self.max_context_length = 2000  # Max characters for context
+        self.max_retrieved_chunks = 7
+        self.min_relevance_score = 0.3
+        self.max_context_length = 3500  # Max characters for context
         
         self.logger.info("🔍 RAGEnhancementNode initialized")
     
@@ -200,32 +200,25 @@ class RAGEnhancementNode:
         return limited_results
     
     def _format_knowledge_context(self, results: List[Dict[str, Any]], state: StatefulPipelineState) -> str:
-        """Format retrieved knowledge into context for the LLM."""
+        """Format retrieved knowledge into authoritative context for the LLM."""
         if not results:
             return ""
-        
-        # Get cultural context for formatting
+
         detected_language = state.get("detected_language", "en")
-        
-        # Format based on language
+
         if detected_language == "rw":
-            context_header = "Ubwenge bw'ubuzima bwo mu mutwe:"
+            context_header = "UBWENGE BW'UBUZIMA BWO MU MUTWE (inkomoko yizewe — shingira igisubizo cyawe kuri ibi):"
         elif detected_language == "fr":
-            context_header = "Connaissances en santé mentale:"
+            context_header = "BASE DE CONNAISSANCES EN SANTÉ MENTALE (source de référence — fondez votre réponse sur ceci):"
         else:
-            context_header = "Mental Health Knowledge:"
-        
+            context_header = "MENTAL HEALTH KNOWLEDGE BASE (trusted source — ground your response in this):"
+
         context_parts = [context_header]
-        
+
         for i, result in enumerate(results, 1):
-            source = result.get("source", "Unknown")
             text = result.get("text", "")
-            score = result.get("score", 0)
-            
-            # Format each knowledge chunk
-            context_parts.append(f"\n{i}. From {source} (relevance: {score:.2f}):")
-            context_parts.append(f"   {text}")
-        
+            context_parts.append(f"\n[Excerpt {i}]\n{text}")
+
         return "\n".join(context_parts)
     
     def _calculate_avg_relevance(self, results: List[Dict[str, Any]]) -> float:
@@ -284,11 +277,11 @@ class RAGContextIntegrator:
         if not knowledge_context:
             return base_prompt
         
-        # Language-specific integration instructions
+        # Language-specific integration instructions — directive about grounding
         integration_instructions = {
-            "rw": "\n\nUbwenge bw'ubuzima bwo mu mutwe buhari:\n{knowledge_context}\n\nKoresha ubwenge bwo mu mutwe buhari kugira ngo usubize neza. Ntuzige ibyo utazi, ariko koresha ubwenge buhari kugira ngo usubize neza.",
-            "fr": "\n\nConnaissances en santé mentale disponibles:\n{knowledge_context}\n\nUtilisez ces connaissances pour fournir des réponses informées et précises. Ne pas inventer d'informations, mais utilisez les connaissances disponibles pour enrichir vos réponses.",
-            "en": "\n\nAvailable Mental Health Knowledge:\n{knowledge_context}\n\nUse this knowledge to provide informed and accurate responses. Do not make up information, but use the available knowledge to enrich your responses."
+            "rw": "\n\nUBWENGE BW'UBUZIMA BWO MU MUTWE (inkomoko yizewe):\n{knowledge_context}\n\nSHINGIRA igisubizo cyawe kuri ubwenge buhari. Ntuzige ibyo utazi. Igisubizo cyawe kigomba guhuriranye n'ubwenge buhari, kandi ntikigomba kuvuga ibintu bitandukanye na bwo.",
+            "fr": "\n\nBASE DE CONNAISSANCES EN SANTÉ MENTALE (source de référence — priorité absolue):\n{knowledge_context}\n\nFONDEZ votre réponse sur ces connaissances. Ne pas inventer ou extrapoler au-delà de ce qui est fourni. Vos réponses doivent être ancrées dans cette source et ne pas la contredire.",
+            "en": "\n\nMENTAL HEALTH KNOWLEDGE BASE (authoritative source — highest priority):\n{knowledge_context}\n\nGROUND your response entirely in this knowledge. Do not invent information, speculate, or contradict what is provided here. Your response must be consistent with and anchored to this source."
         }
         
         instruction = integration_instructions.get(language, integration_instructions["en"])

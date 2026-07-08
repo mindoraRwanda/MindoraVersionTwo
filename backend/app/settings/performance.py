@@ -8,7 +8,7 @@ class PerformanceSettings(BaseAppSettings):
     max_input_length: int = 2000
     max_conversation_history: int = 15
     min_meaningful_message_length: int = 3
-    rag_top_k: int = 3
+    rag_top_k: int = 5
     request_timeout: int = 30
     max_retries: int = 3
     

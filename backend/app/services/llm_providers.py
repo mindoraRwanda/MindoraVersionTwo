@@ -553,6 +553,97 @@ class ChatHuggingFaceProvider(LLMProvider):
             raise RuntimeError(f"Error generating response with HuggingFace model {self.model_path}: {e}")
 
 
+class OpenAICompatibleProvider(LLMProvider):
+    """
+    Provider for any OpenAI-compatible API endpoint.
+
+    Covers Together AI, Fireworks AI, OpenRouter, Anyscale, etc.
+    Primary use-case: Qwen 3 8B via Together AI for the council safety role.
+
+    Required env vars:
+      TOGETHER_API_KEY  (or FIREWORKS_API_KEY, OPENROUTER_API_KEY …)
+      TOGETHER_BASE_URL = https://api.together.xyz/v1
+
+    Or pass base_url / api_key explicitly in the constructor.
+    """
+
+    def __init__(
+        self,
+        model_name: str,
+        base_url: Optional[str] = None,
+        api_key: Optional[str] = None,
+        **kwargs,
+    ):
+        super().__init__(model_name, **kwargs)
+        import os
+        self.base_url = (
+            base_url
+            or os.getenv("TOGETHER_BASE_URL")
+            or os.getenv("OPENAI_COMPATIBLE_BASE_URL")
+            or "https://api.together.xyz/v1"
+        )
+        self.api_key = (
+            api_key
+            or os.getenv("TOGETHER_API_KEY")
+            or os.getenv("FIREWORKS_API_KEY")
+            or os.getenv("OPENROUTER_API_KEY")
+            or os.getenv("OPENAI_COMPATIBLE_API_KEY")
+        )
+        self._chat_model = None
+
+    @property
+    def provider_name(self) -> str:
+        return "openai_compatible"
+
+    def is_available(self) -> bool:
+        return bool(self.api_key and self.api_key.strip())
+
+    async def generate_response(
+        self,
+        messages: List[Any],
+        structured_output: Optional[Union[Type[BaseModel], Dict[str, Any]]] = None,
+    ) -> Union[str, Any]:
+        if not self._chat_model:
+            try:
+                from langchain_openai import ChatOpenAI
+                if not self.api_key:
+                    raise RuntimeError(
+                        "OpenAI-compatible API key not set. "
+                        "Set TOGETHER_API_KEY, FIREWORKS_API_KEY, or OPENAI_COMPATIBLE_API_KEY."
+                    )
+                model_temperature = settings.model.temperature if settings.model else 0.6
+                model_max_tokens = settings.model.max_tokens if settings.model else 1200
+                self._chat_model = ChatOpenAI(
+                    model=self.model_name,
+                    api_key=self.api_key,
+                    base_url=self.base_url,
+                    temperature=model_temperature,
+                    max_tokens=model_max_tokens,
+                )
+                logger.info(
+                    f"[OpenAICompatible] Model ready: {self.model_name} via {self.base_url}"
+                )
+            except ImportError:
+                raise RuntimeError("langchain_openai not installed: pip install langchain_openai")
+
+        if structured_output:
+            try:
+                structured_model = self._chat_model.with_structured_output(structured_output)
+                return await structured_model.ainvoke(messages)
+            except Exception as e:
+                logger.warning(f"[OpenAICompatible] Structured output failed, falling back to text: {e}")
+
+        response = await self._chat_model.ainvoke(messages)
+        return self._extract_content(response, structured_output)
+
+    async def astream_text(self, messages: List[Any]):
+        if not self._chat_model:
+            await self.generate_response(messages)  # lazy init
+        async for chunk in self._chat_model.astream(messages):
+            if hasattr(chunk, "content") and chunk.content:
+                yield chunk.content
+
+
 class LLMProviderFactory:
     """Factory class for creating LLM providers."""
 
@@ -562,6 +653,7 @@ class LLMProviderFactory:
         "openai": ChatOpenAIProvider,
         "groq": ChatGroqProvider,
         "huggingface": ChatHuggingFaceProvider,
+        "openai_compatible": OpenAICompatibleProvider,
     }
 
     @classmethod
@@ -602,27 +694,24 @@ class LLMProviderFactory:
 
         provider_class = cls.PROVIDERS[provider_name]
 
-        # Filter out provider-specific parameters that shouldn't go to LangChain
-        # Only HuggingFace provider uses model_path and device parameters
-        if provider_name == 'huggingface':
-            filtered_kwargs = kwargs
-        else:
-            # For other providers, filter out HuggingFace-specific parameters
-            filtered_kwargs = {k: v for k, v in kwargs.items()
-                              if k not in ['preload_model', 'model_path', 'device']}
+        HF_ONLY_KWARGS = {'preload_model', 'model_path', 'device'}
+        COMPAT_ONLY_KWARGS = {'base_url', 'api_key'}
 
-        # Only pass preload_model to HuggingFace provider
         if provider_name == 'huggingface':
             return provider_class(
                 model_name=model_name,
                 preload_model=preload_model,
-                **filtered_kwargs
+                **kwargs
             )
+        elif provider_name == 'openai_compatible':
+            filtered_kwargs = {k: v for k, v in kwargs.items() if k not in HF_ONLY_KWARGS}
+            return provider_class(model_name=model_name, **filtered_kwargs)
         else:
-            return provider_class(
-                model_name=model_name,
-                **filtered_kwargs
-            )
+            filtered_kwargs = {
+                k: v for k, v in kwargs.items()
+                if k not in HF_ONLY_KWARGS | COMPAT_ONLY_KWARGS
+            }
+            return provider_class(model_name=model_name, **filtered_kwargs)
 
     @classmethod
     def get_available_providers(cls) -> Dict[str, bool]:

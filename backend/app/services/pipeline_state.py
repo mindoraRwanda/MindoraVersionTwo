@@ -156,6 +156,14 @@ class StatefulPipelineState(TypedDict):
     emotion_trajectory: Optional[List[str]]  # emotions per recent user turn, oldest → newest
     emotion_shift: Optional[str]             # "improving" | "worsening" | "stable" | "fluctuating"
 
+    # High-risk category for type-aware escalation
+    # values: suicidal_ideation | self_harm | abuse | violence_gbv | severe_distress | none
+    risk_category: Optional[str]
+
+    # What the user actually wants from this message
+    # values: information_request | emotional_sharing | venting | greeting
+    message_intent: Optional[str]
+
 
 
 
@@ -208,6 +216,8 @@ def create_initial_pipeline_state(
         "crisis_trajectory": None,
         "emotion_trajectory": None,
         "emotion_shift": None,
+        "risk_category": "none",
+        "message_intent": "emotional_sharing",
     }
 
 

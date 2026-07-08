@@ -12,6 +12,7 @@ from .llm_cultural_context import (
     ConversationContextManager
 )
 from .llm_providers import LLMProvider, LLMProviderFactory, create_llm_provider
+from .llm_council import create_llm_council
 from .llm_database_operations import DatabaseManager
 from .unified_rag_service import UnifiedRAGService
 
@@ -255,7 +256,32 @@ class LLMService:
             else:
                 provider_name = self.provider_name or os.getenv("PROVIDER")
 
-            self.llm_provider = self._create_provider_with_fallback(provider_name)
+            # ── Council mode ────────────────────────────────────────────────
+            council_enabled = (
+                getattr(settings.model, "council_enabled", False)
+                or os.getenv("COUNCIL_ENABLED", "false").lower() == "true"
+            )
+            if council_enabled:
+                print("🏛️  LLM Council mode enabled — initializing three-model architecture...")
+                council = create_llm_council(
+                    skip_validation=getattr(settings.model, "council_skip_validation", False)
+                )
+                if council:
+                    self.llm_provider = council
+                    print(
+                        f"✅ LLM Council ready — "
+                        f"conversational={council.conversational_provider.provider_name}/{council.conversational_provider.model_name} | "
+                        f"safety={council.safety_provider.provider_name}/{council.safety_provider.model_name} | "
+                        f"validation={council.validation_provider.provider_name}/{council.validation_provider.model_name}"
+                    )
+                else:
+                    print("⚠️  Council initialization failed; falling back to single-provider mode")
+                    council_enabled = False
+
+            # ── Single-provider mode (default) ──────────────────────────────
+            if not council_enabled:
+                self.llm_provider = self._create_provider_with_fallback(provider_name)
+
             if not self.llm_provider:
                 self._initialization_error = (
                     "No available LLM provider was found. "

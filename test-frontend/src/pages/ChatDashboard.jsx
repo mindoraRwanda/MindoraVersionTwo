@@ -169,19 +169,12 @@ export default function ChatDashboard() {
       const response = await streamMessageResponse(selectedChat.id, originalInput);
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
 
-      // Insert empty bot bubble that we'll fill token-by-token
-      setMessages(prev => [...prev, {
-        id: STREAMING_ID,
-        sender: 'bot',
-        content: '',
-        timestamp: new Date().toISOString()
-      }]);
-      setLoading(false); // hide indicator — streaming bubble takes over
-
+      // Dots stay visible until the first token arrives — then bubble is created and dots vanish
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let buffer = '';
       let finalMeta = null;
+      let bubbleCreated = false;
 
       while (true) {
         const { done, value } = await reader.read();
@@ -196,11 +189,23 @@ export default function ChatDashboard() {
           try {
             const data = JSON.parse(line.slice(6));
             if (data.token !== undefined) {
-              setMessages(prev => prev.map(m =>
-                m.id === STREAMING_ID
-                  ? { ...m, content: m.content + data.token }
-                  : m
-              ));
+              if (!bubbleCreated) {
+                // First token: create the bubble with content already in it, then hide dots
+                setMessages(prev => [...prev, {
+                  id: STREAMING_ID,
+                  sender: 'bot',
+                  content: data.token,
+                  timestamp: new Date().toISOString()
+                }]);
+                setLoading(false); // dots disappear exactly when text starts appearing
+                bubbleCreated = true;
+              } else {
+                setMessages(prev => prev.map(m =>
+                  m.id === STREAMING_ID
+                    ? { ...m, content: m.content + data.token }
+                    : m
+                ));
+              }
             } else if (data.done) {
               finalMeta = { id: data.id, timestamp: data.timestamp };
             }
@@ -209,11 +214,13 @@ export default function ChatDashboard() {
       }
 
       // Replace temporary id with the real DB id + timestamp
-      setMessages(prev => prev.map(m =>
-        m.id === STREAMING_ID
-          ? { ...m, id: finalMeta?.id ?? m.id, timestamp: finalMeta?.timestamp ?? m.timestamp }
-          : m
-      ));
+      if (bubbleCreated) {
+        setMessages(prev => prev.map(m =>
+          m.id === STREAMING_ID
+            ? { ...m, id: finalMeta?.id ?? m.id, timestamp: finalMeta?.timestamp ?? m.timestamp }
+            : m
+        ));
+      }
 
     } catch (err) {
       setMessages(prev => prev.filter(m => m.id !== STREAMING_ID));

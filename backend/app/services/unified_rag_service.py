@@ -165,13 +165,11 @@ class UnifiedRAGService:
             raise
     
     def _process_existing_documents(self):
-        """Process existing PDF documents from datasources folder."""
+        """Process existing PDF documents from the single trusted datasources folder."""
         try:
-            # Look for PDFs in multiple locations
+            # Only load from the authoritative datasources directory
             pdf_folders = [
                 Path("./backend/datasources"),
-                Path("./data"),
-                Path("./datasources")
             ]
             
             pdf_files = []

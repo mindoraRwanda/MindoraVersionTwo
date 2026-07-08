@@ -112,43 +112,67 @@ class CulturalContextPrompts:
     CRISIS_RESOURCES = {
         'en': {
             "national_helpline": "114 (Rwanda Mental Health Helpline - 24/7 free)",
-            "emergency": "112 (Emergency Services)",
+            "emergency": "112 (Emergency Services / Police)",
             "hospitals": [
                 "Ndera Neuropsychiatric Hospital: +250 781 447 928",
                 "King Faisal Hospital: 3939 / +250 788 123 200"
             ],
             "community_health": "Contact your local Community Health Cooperative (CHC) or Health Center",
-            "online_support": "Rwanda Biomedical Centre Mental Health Division"
+            "online_support": "Rwanda Biomedical Centre Mental Health Division",
+            "gbv_abuse": [
+                "Isange One Stop Centre (GBV & abuse - 24/7 free): +250 788 307 020 | CHUK, Kigali",
+                "Rwanda National Police GBV desk: 3554 (toll-free) or 112",
+                "SERUKA Centre (MSF GBV support, Kigali): +250 788 386 792",
+                "HAGURUKA (legal rights for women & children): +250 252 571 441"
+            ]
         },
         'rw': {
             "national_helpline": "114 (Umurongo wa Telefoni w'Ubuzima bwo mu Mutwe - 24/7 ubuntu)",
-            "emergency": "112 (Serivisi z'Ubuhungiro)",
+            "emergency": "112 (Serivisi z'Ubuhungiro / Polisi)",
             "hospitals": [
                 "Ibitaro bya Ndera by'Abaganga b'Indwara zo mu Mvura: +250 781 447 928",
                 "Ibitaro bya King Faisal: 3939 / +250 788 123 200"
             ],
             "community_health": "Hamagara Cooperative y'Ubuzima bw'Umuganda (CHC) cyangwa Ikigo cy'Ubuzima cya hafi",
-            "online_support": "Ishami ry'Ubuzima bwo mu Mvura rya Rwanda Biomedical Centre"
+            "online_support": "Ishami ry'Ubuzima bwo mu Mvura rya Rwanda Biomedical Centre",
+            "gbv_abuse": [
+                "Isange One Stop Centre (ubufasha ku ngaruka z'ihohoterwa - 24/7 ubuntu): +250 788 307 020 | CHUK, Kigali",
+                "Polisi y'Igihugu - Desk y'Ihohoterwa rishingiye ku Gitsina: 3554 (ubuntu) cyangwa 112",
+                "SERUKA Centre (MSF - ubufasha ku GBV, Kigali): +250 788 386 792",
+                "HAGURUKA (uburenganzira bw'abagore n'abana): +250 252 571 441"
+            ]
         },
         'fr': {
             "national_helpline": "114 (Ligne d'écoute santé mentale Rwanda - 24/7 gratuit)",
-            "emergency": "112 (Services d'urgence)",
+            "emergency": "112 (Services d'urgence / Police)",
             "hospitals": [
                 "Hôpital Neuropsychiatrique de Ndera: +250 781 447 928",
                 "Hôpital King Faisal: 3939 / +250 788 123 200"
             ],
             "community_health": "Contactez votre Coopérative de Santé Communautaire (CHC) locale ou Centre de Santé",
-            "online_support": "Division Santé Mentale du Centre Biomédical du Rwanda"
+            "online_support": "Division Santé Mentale du Centre Biomédical du Rwanda",
+            "gbv_abuse": [
+                "Isange One Stop Centre (VBG & abus - 24h/24 gratuit): +250 788 307 020 | CHUK, Kigali",
+                "Police Nationale Rwanda - Bureau VBG: 3554 (gratuit) ou 112",
+                "Centre SERUKA (MSF soutien VBG, Kigali): +250 788 386 792",
+                "HAGURUKA (droits des femmes et enfants): +250 252 571 441"
+            ]
         },
         'sw': {
             "national_helpline": "114 (Nambari ya Simu ya Afya ya Akili ya Rwanda - 24/7 bure)",
-            "emergency": "112 (Huduma za Dharura)",
+            "emergency": "112 (Huduma za Dharura / Polisi)",
             "hospitals": [
                 "Hospitali ya Ndera ya Neuropsychiatric: +250 781 447 928",
                 "Hospitali ya King Faisal: 3939 / +250 788 123 200"
             ],
             "community_health": "Wasiliana na Ushirika wako wa Afya ya Jamii (CHC) au Kituo cha Afya cha karibu",
-            "online_support": "Kitengo cha Afya ya Akili cha Kituo cha Biomedical cha Rwanda"
+            "online_support": "Kitengo cha Afya ya Akili cha Kituo cha Biomedical cha Rwanda",
+            "gbv_abuse": [
+                "Isange One Stop Centre (GBV & unyanyasaji - 24/7 bure): +250 788 307 020 | CHUK, Kigali",
+                "Polisi ya Rwanda - Dawati la GBV: 3554 (bila malipo) au 112",
+                "Kituo cha SERUKA (MSF msaada wa GBV, Kigali): +250 788 386 792",
+                "HAGURUKA (haki za wanawake na watoto): +250 252 571 441"
+            ]
         }
     }
 
@@ -454,6 +478,10 @@ KUWA BINADAMU: Zungumza kwa kawaida. Usisikike kama unasoma kitabu."""
             System prompt for cultural integration in the specified language
         """
         base_prompt = CulturalContextPrompts.CULTURAL_INTEGRATION_PROMPTS.get(language, CulturalContextPrompts.CULTURAL_INTEGRATION_PROMPTS['en'])
+
+        # Always substitute — default to 'prefer_not_to_say' when gender is unknown
+        if not gender:
+            gender = 'prefer_not_to_say'
 
         if gender:
             # Define gender mappings for different languages

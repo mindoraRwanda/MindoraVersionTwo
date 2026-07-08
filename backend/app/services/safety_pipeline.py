@@ -11,7 +11,9 @@ from ..db.models import (
     CrisisType, CrisisSeverity, CrisisStatus
 
 )
-from .emailer import send_therapist_alert,render_crisis_email
+from .emailer import send_therapist_alert, render_crisis_email
+
+_FALLBACK_ALERT_EMAIL = os.getenv("ALERT_FALLBACK_EMAIL", "")
 
 def _map_label(label: str) -> CrisisType:
     try:
@@ -83,6 +85,25 @@ def log_crisis_and_notify(
     therapist = _primary_therapist(db, user_id)
     logger.info(f"🚨 log_crisis_and_notify: Primary therapist found: {therapist.full_name if therapist else 'None'}")
 
+    # Determine alert destination
+    if therapist and therapist.active and therapist.email:
+        email_to = therapist.email
+        logger.info(f"🚨 log_crisis_and_notify: Sending alert to assigned therapist: {therapist.full_name} ({email_to})")
+    elif _FALLBACK_ALERT_EMAIL:
+        email_to = _FALLBACK_ALERT_EMAIL
+        logger.warning(
+            f"🚨 log_crisis_and_notify: No active therapist assigned for user {user_id}. "
+            f"Falling back to ALERT_FALLBACK_EMAIL: {email_to}"
+        )
+    else:
+        email_to = None
+        logger.warning(
+            f"🚨 log_crisis_and_notify: Email SKIPPED — therapist: {therapist}, "
+            f"active: {therapist.active if therapist else 'N/A'}, "
+            f"email: {therapist.email if therapist else 'N/A'}. "
+            f"Set ALERT_FALLBACK_EMAIL in .env to receive alerts when no therapist is assigned."
+        )
+
     crisis = CrisisLog(
         user_id=user_id,
         conversation_id=conversation_id,
@@ -103,44 +124,33 @@ def log_crisis_and_notify(
     db.flush()  # crisis.id now available
     logger.info(f"🚨 log_crisis_and_notify: Crisis log created with ID: {crisis.id}")
 
-    if therapist and therapist.active and therapist.email:
-        logger.info(f"🚨 log_crisis_and_notify: Therapist is active with email: {therapist.email}")
-        
-        # Ensure user_id is a UUID object if it's a string
+    if email_to:
         import uuid
-        if isinstance(user_id, str):
-            try:
-                user_id = uuid.UUID(user_id)
-            except ValueError:
-                pass
-
-        patient = db.get(User, user_id)
+        resolved_user_id = uuid.UUID(user_id) if isinstance(user_id, str) else user_id
+        patient = db.get(User, resolved_user_id)
         case_url = f"{os.getenv('ADMIN_DASHBOARD_URL', 'https://your-admin.app')}/cases/{crisis.id}"
         logger.info(f"🚨 log_crisis_and_notify: Case URL: {case_url}")
 
         subject, text_body, html_body = render_crisis_email(
-        patient_name=patient.username,
-        crisis_type=label,
-        severity=severity,
-        snippet=text,
-        case_url=case_url,
-        confidence=confidence,
-        detected_at=datetime.now(),
+            patient_name=patient.username if patient else str(user_id),
+            crisis_type=label,
+            severity=severity,
+            snippet=text,
+            case_url=case_url,
+            confidence=confidence,
+            detected_at=datetime.now(),
         )
-        logger.info(f"🚨 log_crisis_and_notify: Email rendered - subject: {subject}")
+        logger.info(f"🚨 log_crisis_and_notify: Email rendered — subject: {subject}")
 
-        logger.info(f"🚨 log_crisis_and_notify: Adding email task to background tasks")
         background.add_task(
-    send_therapist_alert,
-    to_email=therapist.email,
-    subject=subject,
-    text=text_body,
-    html=html_body,
-)
+            send_therapist_alert,
+            to_email=email_to,
+            subject=subject,
+            text=text_body,
+            html=html_body,
+        )
         crisis.status = CrisisStatus.notified
-        logger.info(f"🚨 log_crisis_and_notify: Crisis status updated to notified")
-    else:
-        logger.warning(f"🚨 log_crisis_and_notify: Email notification SKIPPED - therapist: {therapist}, active: {therapist.active if therapist else 'N/A'}, email: {therapist.email if therapist else 'N/A'}")
+        logger.info(f"🚨 log_crisis_and_notify: Crisis alert queued → {email_to}")
 
     # caller commits
     return crisis.id

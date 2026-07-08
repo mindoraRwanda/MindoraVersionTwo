@@ -136,8 +136,9 @@ class StatefulMentalHealthPipeline:
     
     def _route_after_unified_analysis(self, state: StatefulPipelineState) -> str:
         """Single routing decision after the unified analysis node."""
-        validation = state.get("query_validation")
-        crisis    = state.get("crisis_assessment")
+        validation    = state.get("query_validation")
+        crisis        = state.get("crisis_assessment")
+        risk_category = state.get("risk_category", "none")
 
         # 1. Non-mental-health → quick conversational reply
         non_therapy = {QueryType.GREETING, QueryType.CASUAL, QueryType.RANDOM}
@@ -145,10 +146,18 @@ class StatefulMentalHealthPipeline:
             logger.info(f"Routing to generate_response (type={validation.query_type.value})")
             return "generate_response"
 
-        # 2. Genuine crisis (explicit suicidal ideation / active self-harm / imminent danger)
+        # 2. High-risk situations that ALWAYS require human escalation
+        #    Abuse and GBV are routed directly regardless of severity score —
+        #    the AI should never handle these alone even at "low" confidence.
+        ALWAYS_ESCALATE = {"abuse", "violence_gbv"}
+        if risk_category in ALWAYS_ESCALATE:
+            logger.warning(f"High-risk disclosure ({risk_category}) → crisis_alert (mandatory escalation)")
+            return "crisis_alert"
+
+        # 3. Suicidal ideation / self-harm / severe distress at high confidence
         if crisis and crisis.is_crisis:
             HIGH = {CrisisSeverity.SEVERE, CrisisSeverity.HIGH}
-            if crisis.crisis_severity in HIGH and crisis.crisis_confidence >= 0.75:
+            if crisis.crisis_severity in HIGH and crisis.crisis_confidence >= 0.70:
                 logger.warning(
                     f"Crisis: {crisis.crisis_severity.value} "
                     f"conf={crisis.crisis_confidence:.2f} → crisis_alert"
@@ -156,7 +165,7 @@ class StatefulMentalHealthPipeline:
                 return "crisis_alert"
             logger.info(f"Low/medium crisis signal ({crisis.crisis_severity.value}) → therapy")
 
-        # 3. Everything else → therapy session (with RAG if available)
+        # 4. Everything else → therapy session (with RAG if available)
         if self.rag_enhancement_node:
             return "rag_enhancement"
         return "empathy"
@@ -265,7 +274,7 @@ class StatefulMentalHealthPipeline:
         state = await self.unified_analysis_node.execute(state)
 
         route = self._route_after_unified_analysis(state)
-        logger.info(f"[stream] route → {route}")
+        logger.info(f"[stream] route → {route} (risk_category={state.get('risk_category', 'none')})")
 
         if route == "rag_enhancement" and self.rag_enhancement_node:
             state = await self.rag_enhancement_node.execute(state)

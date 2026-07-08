@@ -50,12 +50,34 @@ class SafetyPrompts:
 
     @staticmethod
     def get_crisis_keywords() -> List[str]:
-        """Get keywords that indicate crisis situations."""
+        """Get keywords that indicate suicidal crisis situations."""
         return [
             "kill myself", "end my life", "suicide", "hurt myself", "harm myself",
             "i want to die", "i dont want to live", "take my life", "end it all",
             "life isn't worth", "no reason to live", "better off dead",
             "can't go on", "want to disappear", "nothing matters", "hopeless"
+        ]
+
+    @staticmethod
+    def get_abuse_keywords() -> List[str]:
+        """Get keywords that indicate abuse disclosures requiring human escalation."""
+        return [
+            "he hits me", "she hits me", "they hit me", "beats me", "slaps me",
+            "i am being abused", "i'm being abused", "abuses me", "abusing me",
+            "forces me", "forced me", "touches me without", "sexual abuse",
+            "my partner hurts me", "my husband hurts me", "my father hurts me",
+            "domestic violence", "someone is hurting me", "i am not safe at home",
+            "i'm not safe", "raped", "rape", "molested", "assault"
+        ]
+
+    @staticmethod
+    def get_gbv_violence_keywords() -> List[str]:
+        """Get keywords that indicate gender-based violence or threats of violence."""
+        return [
+            "threatened me", "threatens me", "will hurt me", "wants to kill me",
+            "gender based violence", "gbv", "intimate partner violence",
+            "my partner threatened", "i am being threatened", "trafficked",
+            "forced marriage", "early marriage", "fgm", "female genital"
         ]
 
     @staticmethod

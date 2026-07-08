@@ -5,21 +5,49 @@ from .base import BaseAppSettings
 
 class ModelSettings(BaseAppSettings):
     """Configuration for LLM model settings."""
-    
+
     # Core model configuration - maps to MODEL_NAME in env
     model_name: str = "gemma3:1b"  # Changed from default_model_name
-    
+
     # Provider URLs - maps to OLLAMA_BASE_URL in env
     ollama_base_url: str = "http://localhost:11434"
     vllm_base_url: str = "http://localhost:8001/v1"
-    
+
     # Model parameters - maps to TEMPERATURE, MAX_TOKENS in env
     temperature: float = 0.6
     max_tokens: int = 500
-    
+
     # API Keys (secrets) - maps to OPENAI_API_KEY, GROQ_API_KEY in env
     openai_api_key: Optional[str] = None
     groq_api_key: Optional[str] = None
+
+    # ── LLM Council configuration ──────────────────────────────────────────
+    # Enable the three-model council architecture
+    council_enabled: bool = False
+
+    # Conversational role — main therapeutic response model
+    # Recommended: Llama 3.3 70B via Groq (fast, high quality)
+    council_conv_provider: str = "groq"
+    council_conv_model: str = "llama-3.3-70b-versatile"
+
+    # Safety role — crisis/risk classification model
+    # Recommended: Qwen 3 8B via Together AI (precise, instruction-following)
+    # For Qwen via Together AI: set TOGETHER_API_KEY + TOGETHER_BASE_URL
+    # For Qwen via Groq (if available): set council_safety_provider=groq
+    council_safety_provider: str = "groq"
+    council_safety_model: str = "llama-3.1-8b-instant"
+
+    # Validation role — pre-delivery review model (multimodal capable)
+    # Recommended: GPT-4o Mini via OpenAI (strong safety reasoning + vision)
+    council_val_provider: str = "openai"
+    council_val_model: str = "gpt-4o-mini"
+
+    # Set to true to disable the validation gate (faster, less safe)
+    council_skip_validation: bool = False
+
+    # Together AI / OpenAI-compatible endpoint (for Qwen 3 8B)
+    together_api_key: Optional[str] = None
+    together_base_url: str = "https://api.together.xyz/v1"
     
     @field_validator('temperature')
     @classmethod

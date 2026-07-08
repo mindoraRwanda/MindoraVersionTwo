@@ -56,9 +56,6 @@ class VectorDBPopulator:
         self.collection_name = collection_name
         self.data_directories = data_directories or [
             "./backend/datasources",
-            "./data", 
-            "./datasources",
-            "./documents"
         ]
         self.file_extensions = file_extensions or ['.pdf', '.txt', '.md', '.docx']
         self.rag_service: Optional[UnifiedRAGService] = None

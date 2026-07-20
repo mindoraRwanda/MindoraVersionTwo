@@ -1,6 +1,10 @@
 import { useCallback } from 'react';
 import axios from 'axios';
 
+// Same pattern as src/api/api.js — read the backend URL from the build-time
+// env var instead of hardcoding localhost, so this works in production too.
+const API_BASE = process.env.REACT_APP_API_URL || "http://localhost:8000";
+
 // Custom hook for API operations
 const useChatAPI = () => {
   const token = localStorage.getItem('token') ?? '';
@@ -14,7 +18,7 @@ const useChatAPI = () => {
 
   const fetchConversations = useCallback(async () => {
     try {
-      const res = await axios.get('http://localhost:8000/auth/conversations', {
+      const res = await axios.get(`${API_BASE}/auth/conversations`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       return res.data;
@@ -26,7 +30,7 @@ const useChatAPI = () => {
 
   const fetchMessages = useCallback(async (conversationId) => {
     try {
-      const res = await axios.get(`http://localhost:8000/auth/conversations/${conversationId}/messages`, {
+      const res = await axios.get(`${API_BASE}/auth/conversations/${conversationId}/messages`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       return res.data;
@@ -39,7 +43,7 @@ const useChatAPI = () => {
   const createConversation = useCallback(async () => {
     try {
       const res = await axios.post(
-        'http://localhost:8000/auth/conversations',
+        `${API_BASE}/auth/conversations`,
         {},
         { headers: { Authorization: `Bearer ${token}` } }
       );
@@ -52,7 +56,7 @@ const useChatAPI = () => {
 
   const deleteConversation = useCallback(async (chatId) => {
     try {
-      await axios.delete(`http://localhost:8000/auth/conversations/${chatId}`, {
+      await axios.delete(`${API_BASE}/auth/conversations/${chatId}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       return true;

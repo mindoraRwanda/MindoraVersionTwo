@@ -2,6 +2,10 @@ import { useEffect, useState } from 'react';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
 
+// Same pattern as src/api/api.js — read the backend URL from the build-time
+// env var instead of hardcoding localhost, so this works in production too.
+const API_BASE = process.env.REACT_APP_API_URL || "http://localhost:8000";
+
 export default function ChatList() {
   const [conversations, setConversations] = useState([]);
   const [error, setError] = useState(null);
@@ -11,7 +15,7 @@ export default function ChatList() {
   useEffect(() => {
     const fetchChats = async () => {
       try {
-        const res = await axios.get('http://localhost:8000/auth/conversations', {
+        const res = await axios.get(`${API_BASE}/auth/conversations`, {
           headers: { Authorization: `Bearer ${token}` },
         });
         setConversations(res.data);
@@ -31,14 +35,14 @@ export default function ChatList() {
   const handleNewChat = async () => {
     try {
       const res = await axios.post(
-        'http://localhost:8000/auth/conversations',
+        `${API_BASE}/auth/conversations`,
         {},
         { headers: { Authorization: `Bearer ${token}` } }
       );
       navigate(`/chat/${res.data.conversation_id}`);
 
       // Refresh conversation list
-      const convoRes = await axios.get('http://localhost:8000/auth/conversations', {
+      const convoRes = await axios.get(`${API_BASE}/auth/conversations`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       setConversations(convoRes.data);
@@ -56,12 +60,12 @@ export default function ChatList() {
     }
 
     try {
-      await axios.delete(`http://localhost:8000/auth/conversations/${chatId}`, {
+      await axios.delete(`${API_BASE}/auth/conversations/${chatId}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
 
       // Refresh conversation list
-      const convoRes = await axios.get('http://localhost:8000/auth/conversations', {
+      const convoRes = await axios.get(`${API_BASE}/auth/conversations`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       setConversations(convoRes.data);

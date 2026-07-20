@@ -2,6 +2,10 @@ import { useEffect, useState } from 'react';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
 
+// Same pattern as src/api/api.js — read the backend URL from the build-time
+// env var instead of hardcoding localhost, so this works in production too.
+const API_BASE = process.env.REACT_APP_API_URL || "http://localhost:8000";
+
 export default function Login() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -26,7 +30,7 @@ export default function Login() {
   setLoading(true);
 
   try {
-    const res = await axios.post('http://localhost:8000/auth/login', {
+    const res = await axios.post(`${API_BASE}/auth/login`, {
       email: email.trim(),
       password: password.trim(),
     });
@@ -38,7 +42,7 @@ export default function Login() {
     localStorage.setItem('username', username);
 
     // 👉 Now fetch latest conversation and go to it
-    const convoRes = await axios.get('http://localhost:8000/auth/conversations', {
+    const convoRes = await axios.get(`${API_BASE}/auth/conversations`, {
       headers: { Authorization: `Bearer ${token}` },
     });
 
@@ -47,7 +51,7 @@ export default function Login() {
       navigate(`/chat/${latest.id}`);
     } else {
       // Create a new one if none exist
-      const newRes = await axios.post('http://localhost:8000/auth/conversations', {}, {
+      const newRes = await axios.post(`${API_BASE}/auth/conversations`, {}, {
         headers: { Authorization: `Bearer ${token}` },
       });
       navigate(`/chat/${newRes.data.id}`);

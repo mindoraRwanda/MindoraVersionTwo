@@ -84,3 +84,11 @@ COMPLETED_TASKS.md
 .cursor/
 AGENTS.md
 GEMINI.md
+
+# Terraform (infra/)
+infra/.terraform/
+infra/.terraform.lock.hcl
+infra/terraform.tfstate
+infra/terraform.tfstate.backup
+infra/terraform.tfvars
+infra/*.pem

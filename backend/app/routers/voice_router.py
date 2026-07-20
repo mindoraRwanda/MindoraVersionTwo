@@ -35,11 +35,23 @@ def get_db():
 
 
 
-# lazy load a single Whisper model
+# Lazy-loaded Whisper model — actually deferred until first use now.
+# Loading this eagerly at import time (the old behavior) meant every backend
+# instance paid the full model-load memory cost (several hundred MB+) at
+# startup, before a single request came in, even if voice was never used.
 MODEL_SIZE = os.getenv("WHISPER_MODEL", "small")
 DEVICE = os.getenv("WHISPER_DEVICE", "cpu")
 COMPUTE_TYPE = os.getenv("WHISPER_COMPUTE_TYPE", "int8")
-whisper_model = WhisperModel(MODEL_SIZE, device=DEVICE, compute_type=COMPUTE_TYPE)
+_whisper_model = None
+
+
+def get_whisper_model() -> WhisperModel:
+    """Load the Whisper model on first use only, then reuse it."""
+    global _whisper_model
+    if _whisper_model is None:
+        logger.info(f"Loading Whisper model '{MODEL_SIZE}' (first use)...")
+        _whisper_model = WhisperModel(MODEL_SIZE, device=DEVICE, compute_type=COMPUTE_TYPE)
+    return _whisper_model
 
 def _to_wav_16k_mono(src_path: str, dst_path: str):
     cmd = ["ffmpeg", "-y", "-i", src_path, "-ac", "1", "-ar", "16000", "-f", "wav", dst_path]
@@ -75,7 +87,7 @@ async def voice_message(
 
         # transcribe
         try:
-            segments, info = whisper_model.transcribe(
+            segments, info = get_whisper_model().transcribe(
                 wav, language=None, vad_filter=True, beam_size=5, temperature=0.0
             )
             text = " ".join(s.text.strip() for s in segments).strip()

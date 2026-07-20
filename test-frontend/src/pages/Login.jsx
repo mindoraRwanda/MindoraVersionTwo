@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
 
@@ -8,6 +8,13 @@ export default function Login() {
   const [status, setStatus] = useState(null);
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
+
+  useEffect(() => {
+    if (sessionStorage.getItem('logoutReason') === 'idle') {
+      setStatus('You were logged out due to inactivity, to protect your privacy.');
+      sessionStorage.removeItem('logoutReason');
+    }
+  }, []);
 
   const handleLogin = async () => {
   if (!email || !password) {

@@ -30,7 +30,10 @@ class RAGEnhancementNode:
         
         # Configuration
         self.max_retrieved_chunks = 7
-        self.min_relevance_score = 0.3
+        # 0.3 was too strict for situational queries (job loss, breakups, exam failure) —
+        # those consistently scored 0.22-0.26 against this embedding model despite being
+        # clearly in-scope, silently starving the LLM of knowledge-base grounding for them.
+        self.min_relevance_score = 0.22
         self.max_context_length = 3500  # Max characters for context
         
         self.logger.info("🔍 RAGEnhancementNode initialized")

@@ -30,9 +30,12 @@ import Login from './pages/Login';
 import Register from './pages/Register';
 import ChatList from './pages/ChatList';
 import ChatDashboard from './pages/ChatDashboard';
+import useIdleLogout from './hooks/useIdleLogout';
 import './index.css'; // or './App.css' if that's where Tailwind is declared
 
 function App() {
+  useIdleLogout();
+
   return (
     <BrowserRouter>
       <Routes>

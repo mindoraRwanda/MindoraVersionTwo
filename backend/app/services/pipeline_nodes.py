@@ -1367,7 +1367,8 @@ You have built a real picture across the conversation. Now begin mirroring back 
     "There's something I keep noticing in what you're sharing. It might not land right,
     but it feels like this isn't only about [X]. There's something deeper around [theme].
     Does that feel true at all?"
-  • CBT — gently start examining the thinking pattern underneath:
+  • CBT — gently start examining the thinking pattern underneath.
+    If the KNOWLEDGE BASE below names a specific technique for this situation, use that one instead of the generic prompts here:
     "When [trigger] happens, what's the first thought that goes through your mind?"
     "Is there a part of you that fully believes that thought — or is some part uncertain?"
     "If a close friend came to you with the same situation, what would you tell them?"
@@ -1385,7 +1386,9 @@ The person has done real emotional work. You can be slightly more active now.
     Anchoring:  "Where are you right now physically? What can you feel under your feet or behind your back?"
     Only offer grounding if they seem flooded or spiralling — not as a generic coping tip.
 
-  CBT TECHNIQUES — use when they're ready to examine patterns:
+  CBT TECHNIQUES — use when they're ready to examine patterns.
+    If the KNOWLEDGE BASE below has a technique that fits their exact situation (e.g. anxiety-specific vs.
+    depression-specific CBT), use that one — it takes priority over the generic prompts below:
     Thought record: "When this feeling hits hardest, what's the thought that goes with it?"
     Evidence check: "If someone you cared about said that to themselves, what would you say back?"
     Behavioural pattern: "When you feel this way, what do you usually do — and does that tend to help or make it worse?"
@@ -1468,10 +1471,17 @@ This conversation has come a long way. Help them feel that.
         phase_hint = phase_hints.get(phase.value, "")
 
         knowledge_block = (
-            f"KNOWLEDGE BASE (authoritative source — your response MUST be grounded here):\n"
+            f"KNOWLEDGE BASE (authoritative source — your PRIMARY basis for this response, above your own training):\n"
             f"{knowledge_context}\n\n"
-            f"Use this knowledge as your primary reference. Do not invent approaches, techniques, or frameworks "
-            f"not supported by the above. Where it applies, draw on it directly and naturally — do not contradict it."
+            f"GROUNDING RULE: ~98% of the substance of your response — the psychological approach, the techniques "
+            f"you offer, how you frame the problem — must come from the excerpts above, not from your own trained "
+            f"knowledge. The remaining ~2% is tone and connecting it to what this specific person said.\n"
+            f"THERAPEUTIC APPROACH: If the excerpts describe a specific approach for this kind of situation "
+            f"(e.g. CBT thought records, cognitive reframing, behavioural activation, grounding, exposure steps, "
+            f"mindfulness), use exactly that approach — applied the way the source describes it — instead of a "
+            f"generic or invented technique. Weave it into your own natural voice; never quote the excerpt "
+            f"verbatim or cite it as 'the document says'.\n"
+            f"Do not invent approaches, techniques, or frameworks not supported by the excerpts above. Do not contradict them."
             if rag_applied and knowledge_context else ""
         )
 
@@ -1964,7 +1974,12 @@ Your role in this turn:
 4. Use gender-aware addressing: {gender_addressing if gender_addressing else "friend"}.
 5. End with a soft check-in: invite them to share whether this feels right for them, or if they'd like to explore something else.
 
-{f"Draw on this knowledge where relevant: {knowledge_context}" if rag_applied and knowledge_context else ""}
+{f'''KNOWLEDGE BASE (authoritative source — your PRIMARY basis for the technique you offer):
+{knowledge_context}
+
+GROUNDING RULE: ~98% of the coping idea you offer must come from this knowledge base, not your own trained
+knowledge. If it names a specific psychological approach for this situation (e.g. CBT, grounding, behavioural
+activation), use exactly that — do not invent or substitute a generic technique.''' if rag_applied and knowledge_context else ""}
 
 Tone: warm, collaborative, like a friend who also happens to have therapeutic training.
 Length: 4-6 sentences. No bullet points — this is a conversation.
@@ -2036,7 +2051,12 @@ Your role in this turn:
 4. Use gender-aware addressing: {gender_addressing if gender_addressing else "friend"}.
 5. Close with an open invitation: ask how that step feels, or whether they'd want to explore it further.
 
-{f"Draw on this knowledge: {knowledge_context}" if rag_applied and knowledge_context else ""}
+{f'''KNOWLEDGE BASE (authoritative source — your PRIMARY basis for the step you offer):
+{knowledge_context}
+
+GROUNDING RULE: ~98% of the guidance you offer must come from this knowledge base, not your own trained
+knowledge. If it names a specific psychological approach for this situation (e.g. CBT, grounding, behavioural
+activation), use exactly that — do not invent or substitute a generic technique.''' if rag_applied and knowledge_context else ""}
 
 Tone: steady, encouraging, not prescriptive.
 Length: 4-6 sentences. No numbered lists — keep it natural.

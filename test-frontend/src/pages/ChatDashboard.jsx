@@ -5,6 +5,7 @@ import Sidebar from './Sidebar';
 import WelcomeScreen from './WelcomeScreen';
 import DeleteConfirmModal from './DeleteConfirmModal';
 import useChatAPI from './useChatAPI';
+import { logout } from '../utils/auth';
 import './ChatDashboard.css';
 
 const groupMessagesByDate = (messages) => {
@@ -139,9 +140,7 @@ export default function ChatDashboard() {
   }, [isDeleting]);
 
   const handleLogout = useCallback(() => {
-    localStorage.removeItem('token');
-    localStorage.removeItem('username');
-    window.location.href = '/';
+    logout();
   }, []);
 
   const toggleSidebar = useCallback(() => setSidebarVisible(prev => !prev), []);

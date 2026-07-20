@@ -1,4 +1,4 @@
-FROM python:3.10
+FROM python:3.11
 
 WORKDIR /app
 
@@ -29,4 +29,7 @@ COPY . .
 
 EXPOSE 8000
 
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Shell form (not exec/JSON-array form) so $PORT actually expands. Railway
+# injects its own PORT env var at runtime; ${PORT:-8000} falls back to 8000
+# for local/docker-compose use where PORT isn't set.
+CMD uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}

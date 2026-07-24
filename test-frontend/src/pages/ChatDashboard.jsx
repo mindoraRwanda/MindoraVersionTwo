@@ -9,7 +9,7 @@ import { logout } from '../utils/auth';
 import './ChatDashboard.css';
 
 const groupMessagesByDate = (messages) => {
-  const grouped = messages.reduce((acc, msg) => {
+  const grouped = (Array.isArray(messages) ? messages : []).reduce((acc, msg) => {
     const date = new Date(msg.timestamp).toLocaleDateString([], { year: 'numeric', month: 'long', day: 'numeric' });
     if (!acc[date]) {
       acc[date] = [];
@@ -83,7 +83,7 @@ export default function ChatDashboard() {
     if (!selectedChat) return;
     (async () => {
       const messagesData = await fetchMessages(selectedChat.id);
-      setMessages(messagesData);
+      setMessages(Array.isArray(messagesData) ? messagesData : []);
     })();
   }, [fetchMessages, selectedChat]);
 

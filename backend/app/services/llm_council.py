@@ -74,6 +74,25 @@ FLAG AS UNSAFE (is_safe=false) if ANY of the following apply:
 6. Uses shaming, stigmatising, or re-traumatising language
 7. Fails to refer to emergency services when the user has disclosed immediate danger
 
+DO NOT FLAG AS UNSAFE — these are normal, healthy therapeutic conversation and must
+pass with is_safe=true:
+  - Ordinary assessment or follow-up questions about symptoms, sleep, pain, mood, or
+    daily life ("how long has it been going on", "what's it like when it wakes you up")
+  - Brief empathetic acknowledgments or reflections of what the user said
+  - Discussing a mundane physical complaint (headache, fatigue, insomnia) without any
+    self-harm, abuse, or suicide content — these are NEVER unsafe on their own
+  - A response that doesn't yet mention professional resources — early-conversation
+    responses are allowed to just listen; only flag #7 when the user has actually
+    disclosed immediate danger AND the response ignores it
+
+⚠️ CALIBRATION: false positives here are actively harmful — they cause a fine, on-topic
+response to be discarded and replaced with a generic crisis-hotline message that has
+no connection to what the user actually said, which damages trust far more than the
+mundane response ever could have. Only set is_safe=false when the draft response ITSELF
+contains one of the seven flagged behaviors above — never flag it just because the
+underlying topic (pain, sadness, stress) sounds heavy, and never flag it because the
+user's own message (not the draft response) mentions something serious.
+
 FLAG FOR REVISION (needs_revision=true) if the response is safe but could be improved:
 - Language that is dismissive without being dangerous
 - Missing warmth or cultural sensitivity
@@ -182,7 +201,9 @@ Return ONLY valid JSON with these exact keys:
         if not self.skip_validation and isinstance(full_response, str) and full_response.strip():
             full_response = await self._validate_and_maybe_revise(full_response, messages)
 
-        text = str(full_response) if full_response else self._safe_fallback()
+        # An empty/falsy response here means the provider returned nothing usable —
+        # a technical gap, not a safety determination — so use the soft fallback.
+        text = str(full_response) if full_response else self._technical_fallback()
         chunk_size = 6
         for i in range(0, len(text), chunk_size):
             yield text[i:i + chunk_size]
@@ -289,14 +310,28 @@ Return ONLY valid JSON with these exact keys:
                 return await fallback.agenerate(messages, structured_output)
             except Exception as fe:
                 logger.error(f"[Council] Fallback provider also failed: {fe}")
-                return self._safe_fallback() if not structured_output else None
+                # This is a technical/API failure, not a safety determination — use the
+                # soft technical-difficulty message, not the crisis-hotline fallback.
+                # Conflating the two means an ordinary outage gets dressed up as a
+                # crisis referral with no connection to what the user actually said.
+                return self._technical_fallback() if not structured_output else None
 
     @staticmethod
     def _safe_fallback() -> str:
+        """Used only when validation genuinely judges the drafted content unsafe."""
         return (
             "Right now I want to make sure you get the right support. "
             "Please reach out to the Rwanda Mental Health Helpline: 114 (free, 24/7) "
             "or Emergency Services: 112."
+        )
+
+    @staticmethod
+    def _technical_fallback() -> str:
+        """Used when the underlying providers fail (API/network issue) — not a
+        safety determination, so this must not read as a crisis referral."""
+        return (
+            "Sorry, I had trouble putting that into words just now — could you say "
+            "that again?"
         )
 
     # ── Multimodal helper ─────────────────────────────────────────────────────

@@ -6,7 +6,8 @@ Three specialist roles:
                              (Llama 3.3 8B via Groq, or any conversational provider)
   2. Safety model          — Fast, precise crisis/risk classification
                              (Qwen 3 8B via Together AI / Groq, or any fast provider)
-  3. Validation model      — Pre-delivery safety gate; reviews every response
+  3. Validation model      — Pre-delivery safety gate; reviews responses that
+                             touch medication, diagnosis, self-harm, or abuse
                              (GPT-4o Mini via OpenAI — multimodal capable)
 
 The council is transparent to the rest of the pipeline: it implements the same
@@ -15,7 +16,9 @@ LLMProvider interface, so all existing pipeline nodes work unchanged.
 Routing is automatic:
   - Calls with structured_output  →  safety model  (classification tasks)
   - Calls without structured_output →  conversational model  (response generation)
-  - Every free-text response        →  validation model  (review before delivery)
+  - Free-text responses with risk markers → validation model (review before delivery)
+    Ordinary turns (acknowledgments, assessment questions, casual replies) skip
+    this round trip entirely — see _draft_needs_validation.
 
 Multimodal support:
   GPT-4o Mini (validation/conversational) can accept images.
@@ -210,13 +213,58 @@ Return ONLY valid JSON with these exact keys:
 
     # ── Validation logic ──────────────────────────────────────────────────────
 
+    # Markers that gate the (slow, external) validation-model round trip. Most
+    # ordinary therapeutic turns — acknowledgments, assessment questions, casual
+    # replies — contain none of these, so skipping the call for them removes a
+    # full extra LLM round trip from the common case while keeping the safety
+    # net in place for anything that touches medication, diagnosis, self-harm,
+    # or abuse content, in either the draft or the user's own message.
+    _VALIDATION_TRIGGER_MARKERS = frozenset({
+        # medication / dosage
+        "mg", "milligram", "dosage", "dose of", "overdose", "tablets", "pills",
+        "prescription", "antidepressant", "medication", "paracetamol",
+        "ibuprofen", "aspirin", "diazepam",
+        # firm diagnosis
+        "you have depression", "you have anxiety", "you have ptsd",
+        "you have bipolar", "diagnosed with", "you are diagnosed",
+        # self-harm / suicide
+        "suicide", "suicidal", "kill yourself", "kill myself", "self-harm",
+        "self harm", "cutting", "cut yourself", "hurt yourself",
+        "hurting yourself", "end your life", "end my life",
+        # abuse / violence
+        "abuse", "abused", "assault", "rape", "beats me", "beaten",
+    })
+
+    @staticmethod
+    def _extract_last_user_text(messages: List[Any]) -> str:
+        """Return the most recent HumanMessage's text content, or '' if none found."""
+        for msg in reversed(messages):
+            cls = getattr(msg, "__class__", None)
+            if cls and "Human" in cls.__name__:
+                content = getattr(msg, "content", "")
+                return content if isinstance(content, str) else str(content)
+        return ""
+
+    def _draft_needs_validation(self, draft: str, user_text: str) -> bool:
+        """Cheap local pre-filter deciding whether the slow validation-model call is warranted."""
+        haystack = f"{draft} {user_text}".lower()
+        return any(marker in haystack for marker in self._VALIDATION_TRIGGER_MARKERS)
+
     async def _validate_and_maybe_revise(self, response: str, messages: List[Any]) -> str:
         """
-        Run the validation model over the draft response.
+        Run the validation model over the draft response — but only when the
+        cheap local pre-filter finds an actual risk marker (see
+        _draft_needs_validation). Ordinary, risk-free turns skip the round
+        trip entirely instead of paying for a validation call on every message.
 
         Returns the original response, a revised version, or a safe fallback
         depending on what the validation model finds.
         """
+        user_text = self._extract_last_user_text(messages)
+        if not self._draft_needs_validation(response, user_text):
+            logger.debug("[Council] Validation skipped — no risk markers in draft or user message")
+            return response
+
         try:
             result = await self._run_validation(response, messages)
 
@@ -248,14 +296,7 @@ Return ONLY valid JSON with these exact keys:
         """Call the validation model with the draft response and return a ValidationResult."""
         from langchain_core.messages import SystemMessage, HumanMessage
 
-        # Extract the most recent user message for context
-        user_text = ""
-        for msg in reversed(original_messages):
-            cls = getattr(msg, "__class__", None)
-            if cls and "Human" in cls.__name__:
-                content = getattr(msg, "content", "")
-                user_text = content if isinstance(content, str) else str(content)
-                break
+        user_text = self._extract_last_user_text(original_messages)
 
         human_prompt = (
             f"User message: {user_text[:600]}\n\n"

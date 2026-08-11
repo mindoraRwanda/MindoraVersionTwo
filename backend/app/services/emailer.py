@@ -170,6 +170,48 @@ def render_crisis_email(
     return subject, text_body, html_body
 
 
+def render_password_reset_email(reset_link: str, expire_minutes: int) -> tuple[str, str, str]:
+    """Return (subject, text_body, html_body) for a password-reset email."""
+    subject = f"[{ORG_NAME}] Reset your password"
+
+    text_body = (
+        "We received a request to reset your {org} password.\n\n"
+        "Reset it here (this link expires in {mins} minutes):\n{link}\n\n"
+        "If you didn't request this, you can safely ignore this email — "
+        "your password won't be changed.\n\n"
+        "— {org}\n"
+    ).format(org=ORG_NAME, mins=expire_minutes, link=reset_link)
+
+    html_body = """\
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="background:#f1f5f9; padding:20px; font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Arial,sans-serif;">
+  <div style="max-width:480px; margin:0 auto; background:#fff; border-radius:12px; padding:32px; box-shadow:0 2px 8px rgba(0,0,0,.06);">
+    <h2 style="margin-top:0; color:#0f172a;">Reset your password</h2>
+    <p style="color:#334155; line-height:1.55;">
+      We received a request to reset your {org} password. This link expires in {mins} minutes.
+    </p>
+    <p style="margin:24px 0;">
+      <a href="{link}" style="display:inline-block; background:#6d28d9; color:#fff; text-decoration:none; padding:12px 20px; border-radius:10px; font-weight:600;">
+        Reset Password
+      </a>
+    </p>
+    <p style="color:#64748b; font-size:13px;">
+      If the button doesn't work, copy and paste this link into your browser:<br/>
+      <span>{link}</span>
+    </p>
+    <p style="color:#94a3b8; font-size:12px; margin-top:24px;">
+      If you didn't request this, you can safely ignore this email — your password won't be changed.
+    </p>
+  </div>
+</body>
+</html>
+""".format(org=ORG_NAME, mins=expire_minutes, link=reset_link)
+
+    return subject, text_body, html_body
+
+
 def send_therapist_alert(*, to_email: str, subject: str, text: str, html: str | None = None) -> bool:
     """Send multipart (text + optional HTML) email."""
     logging.info(f"🚨 send_therapist_alert: Attempting to send email to {to_email} with subject: {subject}")
@@ -203,3 +245,9 @@ def send_therapist_alert(*, to_email: str, subject: str, text: str, html: str | 
     except Exception as e:
         logging.exception(f"[email failed] to={to_email}: {e}")
         return False
+
+
+# Despite the name, send_therapist_alert is a plain generic multipart-email
+# sender — reuse it for any transactional email (password reset, etc.) rather
+# than duplicating the SMTP logic.
+send_email = send_therapist_alert

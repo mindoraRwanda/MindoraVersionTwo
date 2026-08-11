@@ -20,7 +20,8 @@ export default function Login() {
     }
   }, []);
 
-  const handleLogin = async () => {
+  const handleLogin = async (e) => {
+  if (e) e.preventDefault();
   if (!email || !password) {
     setStatus('Please enter both email and password');
     return;
@@ -190,33 +191,35 @@ export default function Login() {
           <h1 className="brand">Mindora Bot</h1>
           <h2 className="form-title">Sign In</h2>
 
-          <input
-            type="email"
-            placeholder="Email"
-            value={email}
-            onChange={e => setEmail(e.target.value)}
-            className="input-field"
-          />
-          <input
-            type="password"
-            placeholder="Password"
-            value={password}
-            onChange={e => setPassword(e.target.value)}
-            className="input-field"
-          />
+          <form onSubmit={handleLogin}>
+            <input
+              type="email"
+              placeholder="Email"
+              value={email}
+              onChange={e => setEmail(e.target.value)}
+              className="input-field"
+            />
+            <input
+              type="password"
+              placeholder="Password"
+              value={password}
+              onChange={e => setPassword(e.target.value)}
+              className="input-field"
+            />
 
-          <button onClick={handleLogin} className="submit-btn" disabled={loading}>
-            {loading ? 'Signing in...' : 'Sign In'}
-          </button>
-
-          <div className="options-row">
-            <label>
-              <input type="checkbox" className="checkbox" /> Remember Me
-            </label>
-            <button onClick={() => alert('Feature coming soon')} className="link-btn">
-              Forgot Password?
+            <button type="submit" className="submit-btn" disabled={loading}>
+              {loading ? 'Signing in...' : 'Sign In'}
             </button>
-          </div>
+
+            <div className="options-row">
+              <label>
+                <input type="checkbox" className="checkbox" /> Remember Me
+              </label>
+              <button type="button" onClick={() => navigate('/forgot-password')} className="link-btn">
+                Forgot Password?
+              </button>
+            </div>
+          </form>
 
           {status && <p className="error-msg">{status}</p>}
         </div>

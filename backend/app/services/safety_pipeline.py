@@ -13,7 +13,10 @@ from ..db.models import (
 )
 from .emailer import send_therapist_alert, render_crisis_email
 
-_FALLBACK_ALERT_EMAIL = os.getenv("ALERT_FALLBACK_EMAIL", "")
+# Mindora's own inbox — always notified on a crisis alert, in addition to the
+# assigned therapist (if any). Kept under the same env var name for backward
+# compatibility even though it's no longer just a "no therapist assigned" fallback.
+_MINDORA_ALERT_EMAIL = os.getenv("ALERT_FALLBACK_EMAIL", "")
 
 def _map_label(label: str) -> CrisisType:
     try:
@@ -85,23 +88,31 @@ def log_crisis_and_notify(
     therapist = _primary_therapist(db, user_id)
     logger.info(f"🚨 log_crisis_and_notify: Primary therapist found: {therapist.full_name if therapist else 'None'}")
 
-    # Determine alert destination
+    # Determine alert destinations — Mindora is notified on every crisis alert,
+    # and the assigned therapist (if any) is notified in addition, not instead.
+    recipients = []
     if therapist and therapist.active and therapist.email:
-        email_to = therapist.email
-        logger.info(f"🚨 log_crisis_and_notify: Sending alert to assigned therapist: {therapist.full_name} ({email_to})")
-    elif _FALLBACK_ALERT_EMAIL:
-        email_to = _FALLBACK_ALERT_EMAIL
-        logger.warning(
-            f"🚨 log_crisis_and_notify: No active therapist assigned for user {user_id}. "
-            f"Falling back to ALERT_FALLBACK_EMAIL: {email_to}"
-        )
+        recipients.append(therapist.email)
+        logger.info(f"🚨 log_crisis_and_notify: Sending alert to assigned therapist: {therapist.full_name} ({therapist.email})")
     else:
-        email_to = None
+        logger.info(f"🚨 log_crisis_and_notify: No active therapist assigned for user {user_id}.")
+
+    if _MINDORA_ALERT_EMAIL:
+        recipients.append(_MINDORA_ALERT_EMAIL)
+    else:
         logger.warning(
-            f"🚨 log_crisis_and_notify: Email SKIPPED — therapist: {therapist}, "
-            f"active: {therapist.active if therapist else 'N/A'}, "
-            f"email: {therapist.email if therapist else 'N/A'}. "
-            f"Set ALERT_FALLBACK_EMAIL in .env to receive alerts when no therapist is assigned."
+            "🚨 log_crisis_and_notify: ALERT_FALLBACK_EMAIL is not set — Mindora will not "
+            "be notified of this crisis. Set it in .env to receive crisis alerts."
+        )
+
+    # De-duplicate while preserving order, in case the therapist's email happens
+    # to match Mindora's alert address.
+    recipients = list(dict.fromkeys(recipients))
+
+    if not recipients:
+        logger.warning(
+            f"🚨 log_crisis_and_notify: Email SKIPPED — no therapist assigned and "
+            f"ALERT_FALLBACK_EMAIL is not set."
         )
 
     crisis = CrisisLog(
@@ -124,7 +135,7 @@ def log_crisis_and_notify(
     db.flush()  # crisis.id now available
     logger.info(f"🚨 log_crisis_and_notify: Crisis log created with ID: {crisis.id}")
 
-    if email_to:
+    if recipients:
         import uuid
         resolved_user_id = uuid.UUID(user_id) if isinstance(user_id, str) else user_id
         patient = db.get(User, resolved_user_id)
@@ -142,15 +153,16 @@ def log_crisis_and_notify(
         )
         logger.info(f"🚨 log_crisis_and_notify: Email rendered — subject: {subject}")
 
-        background.add_task(
-            send_therapist_alert,
-            to_email=email_to,
-            subject=subject,
-            text=text_body,
-            html=html_body,
-        )
+        for email_to in recipients:
+            background.add_task(
+                send_therapist_alert,
+                to_email=email_to,
+                subject=subject,
+                text=text_body,
+                html=html_body,
+            )
         crisis.status = CrisisStatus.notified
-        logger.info(f"🚨 log_crisis_and_notify: Crisis alert queued → {email_to}")
+        logger.info(f"🚨 log_crisis_and_notify: Crisis alert queued → {recipients}")
 
     # caller commits
     return crisis.id

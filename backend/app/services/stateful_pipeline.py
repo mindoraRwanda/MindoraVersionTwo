@@ -92,6 +92,14 @@ class StatefulMentalHealthPipeline:
             → unified_analysis  (1 LLM call: query type + crisis check)
             → [crisis_alert | rag_enhancement → empathy | generate_response]
             → generate_response → END
+
+        NOTE: process_query() no longer executes this graph — it uses
+        _run_pipeline_core() instead, which runs rag_enhancement concurrently
+        with unified_analysis (LangGraph's fan-out requires reducers on any
+        state key both branches touch, e.g. processing_metadata, which this
+        TypedDict schema doesn't define — not worth the untested risk when a
+        plain asyncio.gather achieves the same overlap safely). This method
+        and the compiled graph are kept for reference / potential future use.
         """
         workflow = StateGraph(StatefulPipelineState)
 
@@ -220,8 +228,8 @@ class StatefulMentalHealthPipeline:
         try:
             # Execute the pipeline
             start_time = time.time()
-            logger.info("⚡ Executing LangGraph pipeline...")
-            final_state = await self.graph.ainvoke(initial_state)
+            logger.info("⚡ Executing pipeline...")
+            final_state = await self._run_pipeline_core(initial_state)
             processing_time = time.time() - start_time
             
             logger.info(f"✅ Pipeline completed in {processing_time:.2f}s")
@@ -242,7 +250,43 @@ class StatefulMentalHealthPipeline:
             logger.error(f"   🔍 Error type: {type(e).__name__}")
             logger.error(f"   📍 Error details: {str(e)}")
             return self._get_fallback_result(query, str(e))
-    
+
+    async def _run_pipeline_core(self, state: StatefulPipelineState) -> StatefulPipelineState:
+        """
+        Manual node orchestration used by process_query() — mirrors the graph's
+        original node sequence and final generate_response pass, but runs RAG
+        retrieval concurrently with classification instead of after it (same
+        pattern as process_query_stream). See _build_pipeline_graph's docstring
+        for why this uses plain asyncio instead of a LangGraph fan-out.
+        """
+        state = await self.emotion_detection_node.execute(state)
+
+        rag_task = None
+        if self.rag_enhancement_node:
+            rag_task = asyncio.create_task(self.rag_enhancement_node.execute(state))
+
+        state = await self.unified_analysis_node.execute(state)
+
+        if rag_task:
+            state = await rag_task
+
+        route = self._route_after_unified_analysis(state)
+        logger.info(f"[process_query] route → {route} (risk_category={state.get('risk_category', 'none')})")
+
+        if route in ("empathy", "rag_enhancement"):
+            state = await self.empathy_node.execute(state)
+        elif route == "crisis_alert":
+            state = await self.crisis_alert_node.execute(state)
+        # else route == "generate_response": nothing generated yet — the final
+        # generate_response_node call below produces it (greeting/casual/off-topic).
+
+        # Always finish with generate_response_node, matching the original
+        # graph's unconditional edge into it — for empathy/crisis_alert this
+        # validates/enhances cultural appropriateness of the already-generated
+        # reply; for the "generate_response" route it's what actually produces one.
+        state = await self.generate_response_node.execute(state)
+        return state
+
     async def process_query_stream(
         self,
         query: str,
@@ -270,14 +314,30 @@ class StatefulMentalHealthPipeline:
 
         # Fast local nodes first (no LLM cost)
         state = await self.emotion_detection_node.execute(state)
+
+        # RAG retrieval only needs the raw query text, not the classification
+        # result, so kick it off now and let it run concurrently with the
+        # classification call below instead of waiting for it to finish first —
+        # this hides the retrieval latency under the classification call's
+        # latency instead of adding the two together. RAGEnhancementNode's own
+        # internal _should_skip_rag heuristic still makes this a fast no-op for
+        # greetings/short messages; on the rare mismatch (classifier disagrees
+        # with that heuristic) the fallback below runs it sequentially instead.
+        rag_task = None
+        if self.rag_enhancement_node:
+            rag_task = asyncio.create_task(self.rag_enhancement_node.execute(state))
+
         # Single LLM call for classification
         state = await self.unified_analysis_node.execute(state)
+
+        if rag_task:
+            state = await rag_task
 
         route = self._route_after_unified_analysis(state)
         logger.info(f"[stream] route → {route} (risk_category={state.get('risk_category', 'none')})")
 
         if route == "rag_enhancement" and self.rag_enhancement_node:
-            state = await self.rag_enhancement_node.execute(state)
+            # RAG already ran concurrently with classification above.
             async for token in self.empathy_node.execute_stream(state):
                 yield token
 
@@ -352,6 +412,7 @@ class StatefulMentalHealthPipeline:
         result = await self.unified_analysis_node.execute(state)
         logger.info("[PIPELINE] Unified Analysis Node completed")
         return result
+
 
     async def _emotion_detection_node(self, state: StatefulPipelineState) -> StatefulPipelineState:
         logger.info("😊 [PIPELINE] Executing Emotion Detection Node")

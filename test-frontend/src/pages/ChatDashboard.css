@@ -1197,6 +1197,13 @@
   color: #6b7280;
 }
 
+.header-actions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .dark-toggle-btn {
   margin-left: auto;
   background: none;
@@ -1210,6 +1217,12 @@
   transition: background 0.15s ease;
 }
 
+/* Inside .header-actions the wrapper already handles right-alignment,
+   so the toggle button itself shouldn't also push right. */
+.header-actions .dark-toggle-btn {
+  margin-left: 0;
+}
+
 .chat-dashboard.dark .dark-toggle-btn {
   border-color: rgba(255, 255, 255, 0.2);
   color: #e5e7eb;
@@ -1217,5 +1230,40 @@
 
 .dark-toggle-btn:hover {
   background: rgba(255, 255, 255, 0.1);
+}
+
+.crisis-help-btn {
+  background: #fee2e2;
+  color: #b91c1c;
+  border: 1px solid #fecaca;
+  border-radius: 20px;
+  padding: 6px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s ease;
+}
+
+.crisis-help-btn:hover {
+  background: #fecaca;
+  border-color: #fca5a5;
+}
+
+.chat-dashboard.dark .crisis-help-btn {
+  background: rgba(239, 68, 68, 0.15);
+  color: #fca5a5;
+  border-color: rgba(239, 68, 68, 0.3);
+}
+
+.chat-dashboard.dark .crisis-help-btn:hover {
+  background: rgba(239, 68, 68, 0.25);
+}
+
+@media (max-width: 480px) {
+  .crisis-help-btn {
+    padding: 6px 10px;
+    font-size: 12px;
+  }
 }
 /* ─────────────────────────────────────────────────────────── */

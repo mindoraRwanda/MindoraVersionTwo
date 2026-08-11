@@ -4,6 +4,7 @@ import Message from './Message';
 import Sidebar from './Sidebar';
 import WelcomeScreen from './WelcomeScreen';
 import DeleteConfirmModal from './DeleteConfirmModal';
+import CrisisHelpModal from './CrisisHelpModal';
 import useChatAPI from './useChatAPI';
 import { logout } from '../utils/auth';
 import './ChatDashboard.css';
@@ -32,6 +33,7 @@ export default function ChatDashboard() {
   const [sidebarVisible, setSidebarVisible] = useState(false);
   const [deleteModal, setDeleteModal] = useState(null); // { id, label } | null
   const [isDeleting, setIsDeleting] = useState(false);
+  const [showCrisisHelp, setShowCrisisHelp] = useState(false);
   const [darkMode, setDarkMode] = useState(() => localStorage.getItem('darkMode') === '1');
 
   // --- Voice state ---
@@ -386,17 +388,26 @@ export default function ChatDashboard() {
             {sidebarVisible ? '✕' : '☰'}
           </button>
           <div className="header-title">MINDORA</div>
-          <button
-            className="dark-toggle-btn"
-            title={darkMode ? 'Switch to light mode' : 'Switch to dark mode'}
-            onClick={() => setDarkMode(prev => {
-              const next = !prev;
-              localStorage.setItem('darkMode', next ? '1' : '0');
-              return next;
-            })}
-          >
-            {darkMode ? '☀️' : '🌙'}
-          </button>
+          <div className="header-actions">
+            <button
+              className="crisis-help-btn"
+              title="Get urgent help now"
+              onClick={() => setShowCrisisHelp(true)}
+            >
+              🆘 Get Help
+            </button>
+            <button
+              className="dark-toggle-btn"
+              title={darkMode ? 'Switch to light mode' : 'Switch to dark mode'}
+              onClick={() => setDarkMode(prev => {
+                const next = !prev;
+                localStorage.setItem('darkMode', next ? '1' : '0');
+                return next;
+              })}
+            >
+              {darkMode ? '☀️' : '🌙'}
+            </button>
+          </div>
         </div>
 
         <div className="chat-content">
@@ -504,6 +515,10 @@ export default function ChatDashboard() {
           onCancel={handleCancelDelete}
           isDeleting={isDeleting}
         />
+      )}
+
+      {showCrisisHelp && (
+        <CrisisHelpModal onClose={() => setShowCrisisHelp(false)} />
       )}
     </div>
   );

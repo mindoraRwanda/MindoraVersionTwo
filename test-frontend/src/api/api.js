@@ -80,6 +80,12 @@ export const login = (email, password) =>
 export const register = (username, email, password) =>
   axios.post(`${API_BASE}/auth/signup`, { username, email, password });
 
+export const forgotPassword = (email) =>
+  axios.post(`${API_BASE}/auth/forgot-password`, { email });
+
+export const resetPassword = (token, newPassword) =>
+  axios.post(`${API_BASE}/auth/reset-password`, { token, new_password: newPassword });
+
 // ---------- Conversations ----------
 export const getChats = () =>
   axios.get(`${API_BASE}/auth/conversations`, { headers: getAuthHeaders() });

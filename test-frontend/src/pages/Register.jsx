@@ -11,7 +11,8 @@ export default function Register() {
   const [error, setError] = useState(null);
   const navigate = useNavigate();
 
-  const handleRegister = async () => {
+  const handleRegister = async (e) => {
+  if (e) e.preventDefault();
   try {
     const res = await register(username, email, password, gender);
     localStorage.setItem('token', res.data.access_token);
@@ -145,48 +146,48 @@ export default function Register() {
           <h1 className="brand">Mindora Bot</h1>
           <h2 className="form-title">Create Account</h2>
 
+          <form onSubmit={handleRegister}>
+            <input
+              type="text"
+              placeholder="Username"
+              value={username}
+              onChange={e => setUsername(e.target.value)}
+              className="input-field"
+            />
 
-          <input
-            type="text"
-            placeholder="Username"
-            value={username}
-            onChange={e => setUsername(e.target.value)}
-            className="input-field"
-          />
-
-          <input
-            type="email"
-            placeholder="Email"
-            value={email}
-            onChange={e => setEmail(e.target.value)}
-            className="input-field"
-          />
-          
-          
-          <select
-            value={gender}
-            onChange={e => setGender(e.target.value)}
-            className="input-field"
-          >
-            <option value="">Select Gender (Optional)</option>
-            <option value="male">Male</option>
-            <option value="female">Female</option>
-            <option value="other">Other</option>
-            <option value="prefer_not_to_say">Prefer not to say</option>
-          </select>
-
-          <input
-            type="password"
-            placeholder="Password"
-            value={password}
-            onChange={e => setPassword(e.target.value)}
-            className="input-field"
-          />
+            <input
+              type="email"
+              placeholder="Email"
+              value={email}
+              onChange={e => setEmail(e.target.value)}
+              className="input-field"
+            />
 
 
-          <button onClick={handleRegister} className="submit-btn">
-            Register
-          </button>
+            <select
+              value={gender}
+              onChange={e => setGender(e.target.value)}
+              className="input-field"
+            >
+              <option value="">Select Gender (Optional)</option>
+              <option value="male">Male</option>
+              <option value="female">Female</option>
+              <option value="other">Other</option>
+              <option value="prefer_not_to_say">Prefer not to say</option>
+            </select>
+
+            <input
+              type="password"
+              placeholder="Password"
+              value={password}
+              onChange={e => setPassword(e.target.value)}
+              className="input-field"
+            />
+
+            <button type="submit" className="submit-btn">
+              Register
+            </button>
+          </form>
 
           {error && <p className="error-msg">{error}</p>}
         </div>

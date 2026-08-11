@@ -18,6 +18,7 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
 SECRET_KEY = os.getenv("SECRET_KEY", "dev_default_secret_key")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 360
+RESET_TOKEN_EXPIRE_MINUTES = int(os.getenv("RESET_TOKEN_EXPIRE_MINUTES", "30"))
 
 def hash_password(password: str) -> str:
     # Pre-hash with SHA-256 to handle any length password while preserving uniqueness
@@ -39,6 +40,34 @@ def create_access_token(data: dict) -> str:
     expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     to_encode.update({"exp": expire, "token_type": "access"})
     return pyjwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+
+def create_reset_token(user_uuid: str) -> str:
+    """Short-lived, self-contained password-reset token — no DB storage needed,
+    it just carries its own expiry and a token_type so it can't be reused as
+    a regular access token (or vice versa)."""
+    expire = datetime.utcnow() + timedelta(minutes=RESET_TOKEN_EXPIRE_MINUTES)
+    to_encode = {"sub": str(user_uuid), "exp": expire, "token_type": "reset"}
+    return pyjwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+
+def decode_reset_token(token: str) -> UUID:
+    """Validate a password-reset token and return the user's UUID.
+
+    Raises ValueError (not a JWT-specific exception) so callers don't need to
+    know about PyJWT to handle an invalid/expired/wrong-type token.
+    """
+    try:
+        payload = pyjwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+    except pyjwt.PyJWTError:
+        raise ValueError("Invalid or expired reset link")
+
+    if payload.get("token_type") != "reset":
+        raise ValueError("Invalid or expired reset link")
+
+    user_id = payload.get("sub")
+    if not user_id:
+        raise ValueError("Invalid or expired reset link")
+
+    return UUID(user_id)
 
 def get_current_user(
     token: str = Depends(oauth2_scheme),

@@ -2,6 +2,7 @@ import os
 import ssl
 import smtplib
 import logging
+import requests
 from email.message import EmailMessage
 from datetime import datetime
 
@@ -12,6 +13,15 @@ SMTP_USER = os.getenv("SMTP_USER", "1ae11aaecfabd9")
 SMTP_PASS = os.getenv("SMTP_PASS", "4bc4abeba1f55c")
 FROM_EMAIL = os.getenv("ALERTS_FROM", "alerts@mindora.local")
 EMAILS_ENABLED = os.getenv("EMAILS_ENABLED", "1") == "1"
+
+# ---- Resend (HTTP API) ----
+# Many hosts (Render included) block outbound SMTP ports (25/465/587)
+# entirely, regardless of credentials — raw smtplib connections fail there
+# with "Network is unreachable". Resend sends over HTTPS instead, which
+# isn't blocked. When RESEND_API_KEY is set, it's used in place of SMTP;
+# otherwise this falls back to SMTP unchanged (e.g. for local dev).
+RESEND_API_KEY = os.getenv("RESEND_API_KEY", "")
+RESEND_API_URL = "https://api.resend.com/emails"
 
 # Branding / links
 ORG_NAME = os.getenv("ORG_NAME", "Mindora")
@@ -212,15 +222,39 @@ def render_password_reset_email(reset_link: str, expire_minutes: int) -> tuple[s
     return subject, text_body, html_body
 
 
-def send_therapist_alert(*, to_email: str, subject: str, text: str, html: str | None = None) -> bool:
-    """Send multipart (text + optional HTML) email."""
-    logging.info(f"🚨 send_therapist_alert: Attempting to send email to {to_email} with subject: {subject}")
-    logging.info(f"🚨 send_therapist_alert: EMAILS_ENABLED = {EMAILS_ENABLED}")
+def _send_via_resend(*, to_email: str, subject: str, text: str, html: str | None) -> bool:
+    """Send via Resend's HTTPS API — used instead of SMTP when RESEND_API_KEY
+    is set, since it works on hosts that block outbound SMTP ports."""
+    payload = {
+        "from": FROM_EMAIL,
+        "to": [to_email],
+        "subject": subject,
+        "text": text,
+    }
+    if html:
+        payload["html"] = html
 
-    if not EMAILS_ENABLED:
-        logging.info(f"[email disabled] would send to={to_email} subj={subject!r}")
+    try:
+        resp = requests.post(
+            RESEND_API_URL,
+            headers={
+                "Authorization": f"Bearer {RESEND_API_KEY}",
+                "Content-Type": "application/json",
+            },
+            json=payload,
+            timeout=20,
+        )
+        if resp.status_code >= 400:
+            logging.error(f"[email failed] to={to_email} via Resend: {resp.status_code} {resp.text}")
+            return False
+        logging.info(f"[email sent] to={to_email} via Resend")
+        return True
+    except Exception as e:
+        logging.exception(f"[email failed] to={to_email} via Resend: {e}")
         return False
 
+
+def _send_via_smtp(*, to_email: str, subject: str, text: str, html: str | None) -> bool:
     msg = EmailMessage()
     msg["Subject"] = subject
     msg["From"] = FROM_EMAIL
@@ -245,6 +279,25 @@ def send_therapist_alert(*, to_email: str, subject: str, text: str, html: str | 
     except Exception as e:
         logging.exception(f"[email failed] to={to_email}: {e}")
         return False
+
+
+def send_therapist_alert(*, to_email: str, subject: str, text: str, html: str | None = None) -> bool:
+    """Send multipart (text + optional HTML) email.
+
+    Uses Resend's HTTP API when RESEND_API_KEY is set (required on hosts that
+    block outbound SMTP, e.g. Render) — otherwise falls back to direct SMTP.
+    """
+    logging.info(f"🚨 send_therapist_alert: Attempting to send email to {to_email} with subject: {subject}")
+    logging.info(f"🚨 send_therapist_alert: EMAILS_ENABLED = {EMAILS_ENABLED}")
+
+    if not EMAILS_ENABLED:
+        logging.info(f"[email disabled] would send to={to_email} subj={subject!r}")
+        return False
+
+    if RESEND_API_KEY:
+        return _send_via_resend(to_email=to_email, subject=subject, text=text, html=html)
+
+    return _send_via_smtp(to_email=to_email, subject=subject, text=text, html=html)
 
 
 # Despite the name, send_therapist_alert is a plain generic multipart-email

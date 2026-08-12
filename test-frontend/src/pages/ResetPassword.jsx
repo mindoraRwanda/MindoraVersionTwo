@@ -96,6 +96,7 @@ export default function ResetPassword() {
           background-color: #f9fafb;
           transition: border-color 0.3s ease;
           box-sizing: border-box;
+          font-size: 16px;
         }
         .input-field:focus {
           outline: none;
@@ -111,6 +112,8 @@ export default function ResetPassword() {
           border-radius: 25px;
           cursor: pointer;
           transition: background 0.3s ease;
+          box-sizing: border-box;
+          font-size: 15px;
         }
         .submit-btn:hover {
           background: linear-gradient(to right, rgb(91, 33, 182), rgb(79, 70, 229));
@@ -122,9 +125,9 @@ export default function ResetPassword() {
         .link-btn {
           background: none;
           border: none;
-          color: rgb(109, 40, 217);
+          color: #2563eb;
           cursor: pointer;
-          text-decoration: underline;
+          text-decoration: none;
           font-size: 14px;
           margin-top: 16px;
         }
@@ -137,6 +140,15 @@ export default function ResetPassword() {
           color: #334155;
           font-size: 15px;
           line-height: 1.6;
+        }
+
+        @media (max-width: 400px) {
+          .login-form {
+            padding: 28px 22px;
+          }
+          .brand {
+            font-size: 26px;
+          }
         }
       `}</style>
 

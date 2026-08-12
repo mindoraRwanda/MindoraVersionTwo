@@ -97,11 +97,13 @@ export default function Login() {
           box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
           border-radius: 10px;
           overflow: hidden;
+          box-sizing: border-box;
         }
         .login-form {
           width: 50%;
           padding: 40px;
           background-color: #fff;
+          box-sizing: border-box;
         }
         .brand {
           color: rgb(109, 40, 217);
@@ -122,6 +124,8 @@ export default function Login() {
           border-radius: 25px;
           background-color: #f9fafb;
           transition: border-color 0.3s ease;
+          box-sizing: border-box;
+          font-size: 16px;
         }
         .input-field:focus {
           outline: none;
@@ -137,6 +141,8 @@ export default function Login() {
           border-radius: 25px;
           cursor: pointer;
           transition: background 0.3s ease;
+          box-sizing: border-box;
+          font-size: 15px;
         }
         .submit-btn:hover {
           background: linear-gradient(to right, rgb(91, 33, 182), rgb(79, 70, 229));
@@ -152,9 +158,11 @@ export default function Login() {
         .link-btn {
           background: none;
           border: none;
-          color: rgb(109, 40, 217);
+          color: #2563eb;
           cursor: pointer;
-          text-decoration: underline;
+          text-decoration: none;
+          font-size: 14px;
+          padding: 2px 0;
         }
         .error-msg {
           margin-top: 16px;
@@ -170,6 +178,7 @@ export default function Login() {
           flex-direction: column;
           justify-content: center;
           align-items: center;
+          box-sizing: border-box;
         }
         .signup-link {
           margin-top: 12px;
@@ -183,6 +192,62 @@ export default function Login() {
         .signup-link:hover {
           background-color: white;
           color: rgb(109, 40, 217);
+        }
+
+        /* ── Small screens: stack the two panels instead of squeezing them side by side ── */
+        @media (max-width: 700px) {
+          .login-box {
+            flex-direction: column;
+            width: 94%;
+          }
+          .login-form,
+          .welcome-panel {
+            width: 100%;
+          }
+          .login-form {
+            padding: 28px 24px;
+          }
+          /* Swap the big gradient panel for a plain centered text line — a
+             full-height colored box under the form wastes space and looks
+             heavy on mobile. Plain block + text-align:center is simpler and
+             more reliable here than flex row-centering for one short line. */
+          .welcome-panel {
+            display: block;
+            background: none;
+            padding: 4px 24px 24px;
+            text-align: center;
+          }
+          .welcome-panel h2 {
+            display: none;
+          }
+          .welcome-panel p {
+            display: inline;
+            margin: 0;
+            color: #6b7280;
+            font-size: 14px;
+          }
+          .signup-link {
+            display: inline;
+            margin-left: 10px;
+            border: none;
+            color: #2563eb;
+            text-decoration: none;
+            font-size: 14px;
+            padding: 0;
+            background: none;
+          }
+        }
+
+        @media (max-width: 380px) {
+          .brand {
+            font-size: 26px;
+          }
+          .form-title {
+            font-size: 20px;
+          }
+          .login-form {
+            padding: 24px 18px;
+          }
         }
       `}</style>
 

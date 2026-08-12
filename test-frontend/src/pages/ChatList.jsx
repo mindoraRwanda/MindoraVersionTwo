@@ -163,6 +163,15 @@ export default function ChatList() {
           color: #475569;
           font-size: 14px;
         }
+
+        @media (max-width: 480px) {
+          .chatlist-container {
+            padding: 20px 16px;
+          }
+          .chatlist-header {
+            font-size: 22px;
+          }
+        }
       `}</style>
 
       <h2 className="chatlist-header">Your Conversations</h2>

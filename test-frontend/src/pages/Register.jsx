@@ -1,7 +1,14 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { register, startNewChat } from '../api/api';
 
+const GENDER_OPTIONS = [
+  { value: '', label: 'Select Gender (Optional)' },
+  { value: 'male', label: 'Male' },
+  { value: 'female', label: 'Female' },
+  { value: 'other', label: 'Other' },
+  { value: 'prefer_not_to_say', label: 'Prefer not to say' },
+];
 
 export default function Register() {
   const [email, setEmail] = useState('');
@@ -9,7 +16,27 @@ export default function Register() {
   const [password, setPassword] = useState('');
   const [gender, setGender] = useState('');
   const [error, setError] = useState(null);
+  const [genderOpen, setGenderOpen] = useState(false);
+  const genderRef = useRef(null);
   const navigate = useNavigate();
+
+  // Close the custom gender dropdown when tapping/clicking outside it
+  useEffect(() => {
+    const handleOutsideClick = (e) => {
+      if (genderRef.current && !genderRef.current.contains(e.target)) {
+        setGenderOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleOutsideClick);
+    document.addEventListener('touchstart', handleOutsideClick);
+    return () => {
+      document.removeEventListener('mousedown', handleOutsideClick);
+      document.removeEventListener('touchstart', handleOutsideClick);
+    };
+  }, []);
+
+  const selectedGenderLabel =
+    GENDER_OPTIONS.find(o => o.value === gender)?.label || GENDER_OPTIONS[0].label;
 
   const handleRegister = async (e) => {
   if (e) e.preventDefault();
@@ -56,12 +83,14 @@ export default function Register() {
           box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
           border-radius: 10px;
           overflow: hidden;
+          box-sizing: border-box;
         }
 
         .register-form {
           width: 50%;
           padding: 40px;
           background-color: #fff;
+          box-sizing: border-box;
         }
 
         .brand {
@@ -85,11 +114,82 @@ export default function Register() {
           border-radius: 25px;
           background-color: #f9fafb;
           transition: border-color 0.3s ease;
+          box-sizing: border-box;
+          font-size: 16px;
         }
 
         .input-field:focus {
           outline: none;
           border-color: rgb(109, 40, 217);
+        }
+
+        /* Custom gender dropdown — a real <select>'s open list is rendered
+           natively by the OS/browser and can't be restyled or size-capped
+           via CSS, which is what made it look oversized. This gives full
+           control over both the closed trigger and the open options list. */
+        .custom-select {
+          position: relative;
+          margin-bottom: 16px;
+        }
+
+        .custom-select-trigger {
+          margin-bottom: 0;
+          width: 100%;
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          text-align: left;
+          cursor: pointer;
+          color: #111827;
+        }
+
+        .placeholder-text {
+          color: #6b7280;
+        }
+
+        .custom-select-arrow {
+          color: #6b7280;
+          font-size: 11px;
+          margin-left: 8px;
+          flex-shrink: 0;
+        }
+
+        .custom-select-options {
+          position: absolute;
+          top: calc(100% + 6px);
+          left: 0;
+          right: 0;
+          background: #fff;
+          border: 1px solid #ddd;
+          border-radius: 14px;
+          box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+          list-style: none;
+          margin: 0;
+          padding: 6px;
+          max-height: 220px;
+          overflow-y: auto;
+          box-sizing: border-box;
+          z-index: 20;
+        }
+
+        .custom-select-option {
+          width: 100%;
+          text-align: left;
+          padding: 10px 14px;
+          border: none;
+          background: none;
+          border-radius: 10px;
+          cursor: pointer;
+          font-size: 16px;
+          font-family: inherit;
+          color: #111827;
+          box-sizing: border-box;
+        }
+
+        .custom-select-option:hover,
+        .custom-select-option.selected {
+          background: #f3e8ff;
+          color: rgb(109, 40, 217);
         }
 
         .submit-btn {
@@ -102,6 +202,8 @@ export default function Register() {
           border-radius: 25px;
           cursor: pointer;
           transition: background 0.3s ease;
+          box-sizing: border-box;
+          font-size: 15px;
         }
 
         .submit-btn:hover {
@@ -123,6 +225,7 @@ export default function Register() {
           flex-direction: column;
           justify-content: center;
           align-items: center;
+          box-sizing: border-box;
         }
 
         .login-link {
@@ -138,6 +241,62 @@ export default function Register() {
         .login-link:hover {
           background-color: white;
           color: rgb(109, 40, 217);
+        }
+
+        /* ── Small screens: stack the two panels instead of squeezing them side by side ── */
+        @media (max-width: 700px) {
+          .register-box {
+            flex-direction: column;
+            width: 94%;
+          }
+          .register-form,
+          .welcome-panel {
+            width: 100%;
+          }
+          .register-form {
+            padding: 28px 24px;
+          }
+          /* Swap the big gradient panel for a plain centered text line — a
+             full-height colored box under the form wastes space and looks
+             heavy on mobile. Plain block + text-align:center is simpler and
+             more reliable here than flex row-centering for one short line. */
+          .welcome-panel {
+            display: block;
+            background: none;
+            padding: 4px 24px 24px;
+            text-align: center;
+          }
+          .welcome-panel h2 {
+            display: none;
+          }
+          .welcome-panel p {
+            display: inline;
+            margin: 0;
+            color: #6b7280;
+            font-size: 14px;
+          }
+          .login-link {
+            display: inline;
+            margin-left: 10px;
+            border: none;
+            color: #2563eb;
+            text-decoration: none;
+            font-size: 14px;
+            padding: 0;
+            background: none;
+          }
+        }
+
+        @media (max-width: 380px) {
+          .brand {
+            font-size: 26px;
+          }
+          .form-title {
+            font-size: 20px;
+          }
+          .register-form {
+            padding: 24px 18px;
+          }
         }
       `}</style>
 
@@ -164,17 +323,32 @@ export default function Register() {
             />
 
 
-            <select
-              value={gender}
-              onChange={e => setGender(e.target.value)}
-              className="input-field"
-            >
-              <option value="">Select Gender (Optional)</option>
-              <option value="male">Male</option>
-              <option value="female">Female</option>
-              <option value="other">Other</option>
-              <option value="prefer_not_to_say">Prefer not to say</option>
-            </select>
+            <div className="custom-select" ref={genderRef}>
+              <button
+                type="button"
+                className="input-field custom-select-trigger"
+                onClick={() => setGenderOpen(prev => !prev)}
+              >
+                <span className={gender ? '' : 'placeholder-text'}>{selectedGenderLabel}</span>
+                <span className="custom-select-arrow">{genderOpen ? '▲' : '▼'}</span>
+              </button>
+
+              {genderOpen && (
+                <ul className="custom-select-options">
+                  {GENDER_OPTIONS.map(opt => (
+                    <li key={opt.value}>
+                      <button
+                        type="button"
+                        className={`custom-select-option${gender === opt.value ? ' selected' : ''}`}
+                        onClick={() => { setGender(opt.value); setGenderOpen(false); }}
+                      >
+                        {opt.label}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
 
             <input
               type="password"

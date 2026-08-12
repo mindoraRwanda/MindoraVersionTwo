@@ -36,6 +36,16 @@ export default function ChatDashboard() {
   const [showCrisisHelp, setShowCrisisHelp] = useState(false);
   const [darkMode, setDarkMode] = useState(() => localStorage.getItem('darkMode') === '1');
 
+  // Tracks small screens so the message-box placeholder can be shortened —
+  // the full text wraps to multiple lines on a narrow single-row textarea
+  // and triggers its scrollbar even while empty.
+  const [isSmallScreen, setIsSmallScreen] = useState(() => window.innerWidth <= 480);
+  useEffect(() => {
+    const handleResize = () => setIsSmallScreen(window.innerWidth <= 480);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
   // --- Voice state ---
   const [isRecording, setIsRecording] = useState(false);
   const [audioBlob, setAudioBlob] = useState(null);
@@ -487,7 +497,11 @@ export default function ChatDashboard() {
                           ta.style.height = Math.min(ta.scrollHeight, 120) + 'px';
                         }}
                         onKeyDown={handleKeyDown}
-                        placeholder="Type your message... (Press Enter to send, Shift+Enter for new line)"
+                        placeholder={
+                          isSmallScreen
+                            ? 'Type your message...'
+                            : 'Type your message... (Press Enter to send, Shift+Enter for new line)'
+                        }
                         rows={1}
                       />
                     </>

@@ -9,6 +9,8 @@
   justify-content: center;
   z-index: 9999;
   animation: dcm-fade-in 0.15s ease;
+  padding: 16px;
+  box-sizing: border-box;
 }
 
 @keyframes dcm-fade-in {
@@ -18,6 +20,7 @@
 
 /* ── Card ── */
 .dcm-card {
+  box-sizing: border-box;
   background: #ffffff;
   border-radius: 16px;
   padding: 32px 28px 24px;
@@ -118,7 +121,6 @@
 /* ── Responsive ── */
 @media (max-width: 480px) {
   .dcm-card {
-    margin: 0 16px;
     padding: 24px 20px 20px;
   }
 }

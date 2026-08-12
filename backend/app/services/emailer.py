@@ -14,12 +14,20 @@ SMTP_PASS = os.getenv("SMTP_PASS", "4bc4abeba1f55c")
 FROM_EMAIL = os.getenv("ALERTS_FROM", "alerts@mindora.local")
 EMAILS_ENABLED = os.getenv("EMAILS_ENABLED", "1") == "1"
 
+# ---- SendGrid (HTTP API) ----
+# Preferred over Resend when set — SendGrid supports "Single Sender
+# Verification" (verify one inbox by clicking a link, no domain/DNS access
+# needed), which Resend doesn't offer. Useful when ALERTS_FROM is an address
+# like a Gmail account whose domain you don't control.
+SENDGRID_API_KEY = os.getenv("SENDGRID_API_KEY", "")
+SENDGRID_API_URL = "https://api.sendgrid.com/v3/mail/send"
+
 # ---- Resend (HTTP API) ----
-# Many hosts (Render included) block outbound SMTP ports (25/465/587)
+# Many hosts (Render/Railway included) block outbound SMTP ports (25/465/587)
 # entirely, regardless of credentials — raw smtplib connections fail there
-# with "Network is unreachable". Resend sends over HTTPS instead, which
-# isn't blocked. When RESEND_API_KEY is set, it's used in place of SMTP;
-# otherwise this falls back to SMTP unchanged (e.g. for local dev).
+# with "Network is unreachable". Resend and SendGrid both send over HTTPS
+# instead, which isn't blocked. Priority: SendGrid > Resend > SMTP — the first
+# one with an API key set wins; SMTP is the local-dev fallback.
 RESEND_API_KEY = os.getenv("RESEND_API_KEY", "")
 RESEND_API_URL = "https://api.resend.com/emails"
 
@@ -222,6 +230,41 @@ def render_password_reset_email(reset_link: str, expire_minutes: int) -> tuple[s
     return subject, text_body, html_body
 
 
+def _send_via_sendgrid(*, to_email: str, subject: str, text: str, html: str | None) -> bool:
+    """Send via SendGrid's HTTPS API — used instead of Resend/SMTP when
+    SENDGRID_API_KEY is set. SendGrid requires text/plain listed before
+    text/html when both are present."""
+    content = [{"type": "text/plain", "value": text}]
+    if html:
+        content.append({"type": "text/html", "value": html})
+
+    payload = {
+        "personalizations": [{"to": [{"email": to_email}]}],
+        "from": {"email": FROM_EMAIL},
+        "subject": subject,
+        "content": content,
+    }
+
+    try:
+        resp = requests.post(
+            SENDGRID_API_URL,
+            headers={
+                "Authorization": f"Bearer {SENDGRID_API_KEY}",
+                "Content-Type": "application/json",
+            },
+            json=payload,
+            timeout=20,
+        )
+        if resp.status_code >= 400:
+            logging.error(f"[email failed] to={to_email} via SendGrid: {resp.status_code} {resp.text}")
+            return False
+        logging.info(f"[email sent] to={to_email} via SendGrid")
+        return True
+    except Exception as e:
+        logging.exception(f"[email failed] to={to_email} via SendGrid: {e}")
+        return False
+
+
 def _send_via_resend(*, to_email: str, subject: str, text: str, html: str | None) -> bool:
     """Send via Resend's HTTPS API — used instead of SMTP when RESEND_API_KEY
     is set, since it works on hosts that block outbound SMTP ports."""
@@ -284,8 +327,9 @@ def _send_via_smtp(*, to_email: str, subject: str, text: str, html: str | None) 
 def send_therapist_alert(*, to_email: str, subject: str, text: str, html: str | None = None) -> bool:
     """Send multipart (text + optional HTML) email.
 
-    Uses Resend's HTTP API when RESEND_API_KEY is set (required on hosts that
-    block outbound SMTP, e.g. Render) — otherwise falls back to direct SMTP.
+    Uses an HTTP-based provider when configured (required on hosts that block
+    outbound SMTP, e.g. Render/Railway) — otherwise falls back to direct SMTP.
+    Priority: SendGrid > Resend > SMTP, based on which API key is set.
     """
     logging.info(f"🚨 send_therapist_alert: Attempting to send email to {to_email} with subject: {subject}")
     logging.info(f"🚨 send_therapist_alert: EMAILS_ENABLED = {EMAILS_ENABLED}")
@@ -293,6 +337,9 @@ def send_therapist_alert(*, to_email: str, subject: str, text: str, html: str | 
     if not EMAILS_ENABLED:
         logging.info(f"[email disabled] would send to={to_email} subj={subject!r}")
         return False
+
+    if SENDGRID_API_KEY:
+        return _send_via_sendgrid(to_email=to_email, subject=subject, text=text, html=html)
 
     if RESEND_API_KEY:
         return _send_via_resend(to_email=to_email, subject=subject, text=text, html=html)

@@ -26,16 +26,18 @@ class ModelSettings(BaseAppSettings):
     council_enabled: bool = False
 
     # Conversational role — main therapeutic response model
-    # Recommended: Llama 3.3 70B via Groq (fast, high quality)
+    # Recommended: GPT-OSS 120B via Groq (fast, high quality)
+    # NOTE: llama-3.3-70b-versatile was deprecated/shut down by Groq on 08/16/26
     council_conv_provider: str = "groq"
-    council_conv_model: str = "llama-3.3-70b-versatile"
+    council_conv_model: str = "openai/gpt-oss-120b"
 
     # Safety role — crisis/risk classification model
     # Recommended: Qwen 3 8B via Together AI (precise, instruction-following)
     # For Qwen via Together AI: set TOGETHER_API_KEY + TOGETHER_BASE_URL
     # For Qwen via Groq (if available): set council_safety_provider=groq
+    # NOTE: llama-3.1-8b-instant was deprecated/shut down by Groq on 08/16/26
     council_safety_provider: str = "groq"
-    council_safety_model: str = "llama-3.1-8b-instant"
+    council_safety_model: str = "openai/gpt-oss-20b"
 
     # Validation role — pre-delivery review model (multimodal capable)
     # Recommended: GPT-4o Mini via OpenAI (strong safety reasoning + vision)

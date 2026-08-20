@@ -2378,8 +2378,90 @@ class CrisisAlertNode(BasePipelineNode):
             }
 
             guidance = RISK_GUIDANCE.get(risk_category, RISK_GUIDANCE["suicidal_ideation"])
+            severity_value = crisis.crisis_severity.value if crisis else "high"
 
-            system_prompt = f"""
+            # ── Ask-why gate ─────────────────────────────────────────────────
+            # For suicidal ideation / self-harm WITHOUT an explicit immediate
+            # plan (severity below "severe"), engage first — ask what's going
+            # on — rather than opening with a list of phone numbers, which can
+            # read as a scripted brush-off right when someone has just opened
+            # up. Abuse/violence_gbv and severe_distress are exempt: "why do
+            # you want to do that" doesn't make sense for a disclosure of
+            # victimisation or a psychotic break, so those keep giving
+            # resources immediately, as does anything already at "severe" —
+            # an explicit plan/means/timeline needs immediate resources, no
+            # delay, regardless of category.
+            #
+            # "Already engaged" is detected by checking whether the person's
+            # PREVIOUS message also contained explicit crisis language — if
+            # so, this is a follow-up in the same disclosure (they've likely
+            # just answered "why"), so resources are given now instead of
+            # asking again. The email alert below has already fired either
+            # way — this gate only affects what's shown to the user.
+            _CRISIS_LANGUAGE_MARKERS = {
+                "suicide", "suicidal", "kill myself", "kill me", "end my life", "end it all",
+                "want to die", "wish i was dead", "wish i were dead", "better off dead",
+                "not worth living", "no reason to live", "can't go on", "cant go on",
+                "hurt myself", "hurting myself", "harm myself", "cutting myself", "cut myself",
+                "self harm", "self-harm", "overdose", "take my life", "no point living",
+            }
+            history = state.get("conversation_history") or []
+            prior_user_texts = [
+                (msg.get("text") or msg.get("content") or "").lower()
+                for msg in history
+                if str(msg.get("role", "")).lower() == "user"
+            ]
+            already_engaged = bool(prior_user_texts) and any(
+                marker in prior_user_texts[-1] for marker in _CRISIS_LANGUAGE_MARKERS
+            )
+
+            ask_why_mode = (
+                risk_category in {"suicidal_ideation", "self_harm"}
+                and severity_value != "severe"
+                and not already_engaged
+            )
+
+            if ask_why_mode:
+                system_prompt = f"""
+You are Mindora, a warm and caring support companion for {language} speakers.
+
+The person has just disclosed {guidance['situation']}. This is serious, but they have NOT
+described an immediate plan, means, or timeline — so your job right now is to engage with real
+care and understand what's happening, not to immediately hand them a list of phone numbers. A
+cold list of hotlines right after someone opens up like this can feel dismissive, like you're
+trying to move them along rather than actually listen.
+
+{cultural_prompt}
+
+HOW TO RESPOND:
+1. Acknowledge what they shared with real warmth and without alarm or panic — show you're
+   staying with them, not recoiling from it.
+2. Ask ONE gentle, open question to understand what's going on — what's been happening, what's
+   making things feel this heavy right now, how long they've felt this way. Pick whichever feels
+   most natural given what they actually said.
+3. Use gender-aware addressing: {gender_addressing or "friend"}.
+4. Do NOT list hotline numbers or contacts in this response — that comes once you understand
+   more of what's going on, not before.
+5. You may briefly note that immediate help is available whenever they want it, without listing
+   numbers yet — e.g. "if things ever feel urgent, tell me and I'll share who to call right
+   away." That keeps the door open without leading with a list.
+
+TONE NOTE: {guidance['tone_note']}
+
+Tone: steady, warm, unhurried — like someone who has time for them, not rushing to close the
+conversation. Plain prose, 3-5 sentences, no bullet points, no phone numbers.
+"""
+                user_prompt = f"""
+The person said: '{query}'
+Risk type: {risk_category}
+Severity: {severity_value}
+Language: {language}
+
+Write a response that makes them feel heard and asks — with real warmth, not clinically — what's
+going on for them right now. Do not include any phone numbers or contact lists in this response.
+"""
+            else:
+                system_prompt = f"""
 You are Mindora, a warm and caring support companion for {language} speakers.
 
 IMPORTANT — YOUR ROLE IN THIS CONVERSATION:
@@ -2405,11 +2487,10 @@ AVAILABLE SUPPORT (share these in your response):
 Tone: steady, warm, direct — never panicked.
 Length: 4-6 sentences, then the contacts. Plain prose, no bullet points in the emotional part.
 """
-
-            user_prompt = f"""
+                user_prompt = f"""
 The person said: '{query}'
 Risk type: {risk_category}
-Severity: {crisis.crisis_severity.value if crisis else "high"}
+Severity: {severity_value}
 Language: {language}
 
 Write a response that makes them feel genuinely heard, clearly connects them to human professional support,
@@ -2419,7 +2500,11 @@ and gives them the relevant contact numbers. Do not start with "I'm so sorry." B
             response = await self._call_llm(system_prompt, user_prompt, state)
             state["generated_content"] = response
             state["response_confidence"] = 0.9
-            state["response_reason"] = f"Crisis response for {risk_category} — human escalation pathway provided"
+            state["response_reason"] = (
+                f"Crisis response for {risk_category} — asked why before offering resources"
+                if ask_why_mode else
+                f"Crisis response for {risk_category} — human escalation pathway provided"
+            )
 
             processing_time = time.time() - start_time
 
@@ -2428,12 +2513,13 @@ and gives them the relevant contact numbers. Do not start with "I'm so sorry." B
                 state,
                 "crisis_alert",
                 0.9,
-                "Generated crisis response with emergency resources",
-                ["crisis", "emergency", "resources"],
+                "Generated crisis inquiry (resources withheld pending reason)" if ask_why_mode
+                else "Generated crisis response with emergency resources",
+                ["crisis", "inquiry"] if ask_why_mode else ["crisis", "emergency", "resources"],
                 processing_time
             )
 
-            logger.info("✅ Crisis alert response generated")
+            logger.info(f"✅ Crisis alert response generated (ask_why_mode={ask_why_mode})")
 
         except Exception as e:
             logger.error(f"❌ Crisis alert response generation failed: {e}")

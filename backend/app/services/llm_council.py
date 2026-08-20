@@ -75,7 +75,10 @@ FLAG AS UNSAFE (is_safe=false) if ANY of the following apply:
 4. Provides firm medical diagnoses or prescribes specific medication
 5. Contains materially inaccurate mental health information likely to cause harm
 6. Uses shaming, stigmatising, or re-traumatising language
-7. Fails to refer to emergency services when the user has disclosed immediate danger
+7. Fails to refer to emergency services when the user has disclosed an ACTIVE, IMMEDIATE
+   plan or means to act (e.g. "I have pills in my hand", a stated method with a timeline).
+   General suicidal ideation or self-harm talk WITHOUT a stated plan/means/timeline does
+   NOT trigger this — see the deliberate "ask why first" carve-out below.
 
 DO NOT FLAG AS UNSAFE — these are normal, healthy therapeutic conversation and must
 pass with is_safe=true:
@@ -86,7 +89,16 @@ pass with is_safe=true:
     self-harm, abuse, or suicide content — these are NEVER unsafe on their own
   - A response that doesn't yet mention professional resources — early-conversation
     responses are allowed to just listen; only flag #7 when the user has actually
-    disclosed immediate danger AND the response ignores it
+    disclosed an immediate plan/means AND the response ignores it
+  - A response that acknowledges disclosed suicidal ideation or self-harm WITHOUT an
+    explicit plan, and asks a genuine, caring question about what's going on — WITHOUT
+    yet listing hotline numbers. This is intentional, approved design: the product
+    deliberately asks why before handing over a list of numbers on a first disclosure,
+    because leading with a hotline list reads as a scripted brush-off. Do NOT flag this
+    as unsafe and do NOT rewrite it to insert emergency numbers — that directly undoes
+    the intended behavior. Only override this carve-out if the draft itself minimises,
+    dismisses, or discourages the person from seeking help, or if the person has
+    disclosed an explicit plan/means/timeline that the draft response ignores.
 
 ⚠️ CALIBRATION: false positives here are actively harmful — they cause a fine, on-topic
 response to be discarded and replaced with a generic crisis-hotline message that has
@@ -100,6 +112,11 @@ FLAG FOR REVISION (needs_revision=true) if the response is safe but could be imp
 - Language that is dismissive without being dangerous
 - Missing warmth or cultural sensitivity
 - Slightly off-topic response
+
+If you do write a revised_response that includes emergency contacts, you MUST use these
+region-specific resources — this product operates in Rwanda, NEVER invent generic US-style
+numbers like "911": Rwanda Mental Health Helpline 114, Police/Emergency 112. Do not add a
+third resource unless the draft already referenced one.
 
 Return ONLY valid JSON with these exact keys:
   is_safe           (bool)
@@ -431,9 +448,9 @@ def create_llm_council(
 
     Expected environment variables:
       COUNCIL_CONV_PROVIDER    = groq          (conversational role)
-      COUNCIL_CONV_MODEL       = llama-3.3-70b-versatile
+      COUNCIL_CONV_MODEL       = openai/gpt-oss-120b
       COUNCIL_SAFETY_PROVIDER  = groq          (safety/classification role)
-      COUNCIL_SAFETY_MODEL     = llama-3.1-8b-instant
+      COUNCIL_SAFETY_MODEL     = openai/gpt-oss-20b
       COUNCIL_VAL_PROVIDER     = openai        (validation role)
       COUNCIL_VAL_MODEL        = gpt-4o-mini
       COUNCIL_SKIP_VALIDATION  = false
@@ -466,11 +483,11 @@ def create_llm_council(
 
     conv = _build(
         "COUNCIL_CONV_PROVIDER", "COUNCIL_CONV_MODEL",
-        "groq", "llama-3.3-70b-versatile", conversational_provider
+        "groq", "openai/gpt-oss-120b", conversational_provider
     )
     safety = _build(
         "COUNCIL_SAFETY_PROVIDER", "COUNCIL_SAFETY_MODEL",
-        "groq", "llama-3.1-8b-instant", safety_provider
+        "groq", "openai/gpt-oss-20b", safety_provider
     )
     val = _build(
         "COUNCIL_VAL_PROVIDER", "COUNCIL_VAL_MODEL",

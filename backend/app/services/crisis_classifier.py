@@ -20,7 +20,7 @@ class CrisisResult(TypedDict, total=False):
     confidence: float
     rationale: str
 
-MODEL = os.getenv("CRISIS_MODEL", "llama-3.1-8b-instant")  # safer default than legacy llama3-8b-8192
+MODEL = os.getenv("CRISIS_MODEL", "openai/gpt-oss-20b")  # llama-3.1-8b-instant deprecated/shut down by Groq on 08/16/26
 
 SYSTEM_PROMPT = """You are a safety classifier for a mental-health chatbot.
 Return STRICT JSON with keys: label, severity, confidence, rationale.

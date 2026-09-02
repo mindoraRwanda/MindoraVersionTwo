@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
+import { getToken, isEmbedded, whenTokenReady } from '../utils/chatToken';
 
 // Same pattern as src/api/api.js — read the backend URL from the build-time
 // env var instead of hardcoding localhost, so this works in production too.
@@ -9,14 +10,28 @@ const API_BASE = process.env.REACT_APP_API_URL || "http://localhost:8000";
 export default function ChatList() {
   const [conversations, setConversations] = useState([]);
   const [error, setError] = useState(null);
-  const token = localStorage.getItem('token');
+  const token = getToken();
   const navigate = useNavigate();
 
+  const [ready, setReady] = useState(!isEmbedded());
+
+  // Embedded, the token arrives by postMessage a moment after mount. Firing the
+  // first request before it lands is a guaranteed 401 and an empty chat list,
+  // so wait for the handshake to complete.
   useEffect(() => {
+    if (ready) return;
+    let live = true;
+    whenTokenReady().then(() => { if (live) setReady(true); });
+    return () => { live = false; };
+  }, [ready]);
+
+  useEffect(() => {
+    if (!ready) return;
+
     const fetchChats = async () => {
       try {
         const res = await axios.get(`${API_BASE}/auth/conversations`, {
-          headers: { Authorization: `Bearer ${token}` },
+          headers: { Authorization: `Bearer ${getToken()}` },
         });
         setConversations(res.data);
       } catch (err) {
@@ -30,7 +45,7 @@ export default function ChatList() {
     };
 
     fetchChats();
-  }, [token]);
+  }, [token, ready]);
 
   const handleNewChat = async () => {
     try {

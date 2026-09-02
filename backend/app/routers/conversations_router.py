@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from typing import List
 from uuid import UUID
-from ..auth.utils import get_current_user
+from ..auth.integration_auth import get_current_user
 from ..db.database import SessionLocal
 from ..db.models import Conversation, Message, User, EmotionLog
 from ..auth.schemas import ConversationOut

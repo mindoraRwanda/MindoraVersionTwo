@@ -92,3 +92,8 @@ infra/terraform.tfstate
 infra/terraform.tfstate.backup
 infra/terraform.tfvars
 infra/*.pem
+
+# Local-only integration test harness (mock main web app + test notes).
+# A development tool, not part of the product: it fakes a login with hardcoded
+# users, so it must never run anywhere but a developer's machine.
+integration/test-harness/

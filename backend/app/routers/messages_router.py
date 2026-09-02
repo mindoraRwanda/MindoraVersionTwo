@@ -6,7 +6,7 @@ import json
 from collections import defaultdict, deque
 from sqlalchemy.orm import Session
 from typing import List, Dict, Any, Optional
-from ..auth.utils import get_current_user
+from ..auth.integration_auth import get_current_user
 from ..settings.settings import settings
 from ..db.database import SessionLocal
 from ..db.models import Conversation, Message, User, EmotionLog
@@ -144,8 +144,12 @@ async def send_message(
         .all()
 
     recent_history.reverse()
+    # msg.sender is a SenderType enum, not a plain string — extract .value so
+    # downstream str(role).lower() == "user"/"bot" checks actually match
+    # (same fix already applied to the streaming endpoint below).
     conversation_history = [
-        {"role": msg.sender, "text": msg.content} for msg in recent_history
+        {"role": (msg.sender.value if hasattr(msg.sender, "value") else msg.sender), "text": msg.content}
+        for msg in recent_history
     ]
     history_time = time.time() - history_start
     print(f"⏱️  DB history load: {history_time:.3f}s ({len(recent_history)} messages)")

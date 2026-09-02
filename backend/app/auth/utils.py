@@ -69,10 +69,19 @@ def decode_reset_token(token: str) -> UUID:
 
     return UUID(user_id)
 
-def get_current_user(
-    token: str = Depends(oauth2_scheme),
-    db: Session = Depends(get_db)
-) -> UserOut:
+def get_current_user_legacy(token: str, db: Session) -> UserOut:
+    """
+    Verify a token minted by this service's own /auth/login.
+
+    Kept only so sessions that existed before the main-app integration keep
+    working during the cutover. `auth.integration_auth.get_current_user` calls this
+    as a fallback while INTEGRATION_ALLOW_LEGACY_TOKENS is true. Delete this
+    function, the /auth/signup and /auth/login routes, and the password helpers
+    above once the standalone chatbot login is retired.
+
+    Note this is a plain function, not a FastAPI dependency — integration_auth owns
+    the Authorization header now and hands the raw token in.
+    """
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
@@ -90,3 +99,20 @@ def get_current_user(
     if user is None:
         raise credentials_exception
     return user
+
+
+def get_current_user(
+    token: str = Depends(oauth2_scheme),
+    db: Session = Depends(get_db)
+) -> UserOut:
+    """
+    Deprecated shim. Routers should import get_current_user from
+    ..auth.integration_auth instead; this forwards there so nothing breaks if an
+    import was missed.
+    """
+    from fastapi.security import HTTPAuthorizationCredentials
+    from .integration_auth import get_current_user as _integrated
+    return _integrated(
+        credentials=HTTPAuthorizationCredentials(scheme="Bearer", credentials=token),
+        db=db,
+    )

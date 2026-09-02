@@ -67,8 +67,16 @@ class User(Base):
     username = Column(String(100), nullable=False, unique=True, index=True)
     phone = Column(String(50))
     email = Column(String(255), nullable=False, unique=True, index=True)
-    password = Column(String(255), nullable=False)  # store hash
+    password = Column(String(255), nullable=True)  # store hash; null for Google-only accounts
     gender = Column(String(20), nullable=True)
+    google_id = Column(String(255), unique=True, index=True, nullable=True)  # Google 'sub' claim
+
+    # --- main web app integration ---
+    # The main app's user id. Unique when present; NULL for accounts created
+    # before the integration that nobody has claimed yet.
+    external_id = Column(String(255), unique=True, index=True, nullable=True)
+    # 'local' | 'google' | 'mindora_web'
+    auth_provider = Column(String(20), server_default="local", nullable=True)
 
     created_at = Column(TIMESTAMP, server_default=func.now())
 

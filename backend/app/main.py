@@ -51,10 +51,12 @@ try:
     from .routers.conversations_router import router as conversations_router
     from .routers.messages_router import router as messages_router
     from .routers.voice_router import router as voice_router
+    from .routers.integration_router import router as integration_router
 except ImportError:
     from .routers.conversations_router import router as conversations_router
     from .routers.messages_router import router as messages_router
     from .routers.voice_router import router as voice_router
+    from .routers.integration_router import router as integration_router
 
 # Import service container for global service management
 try:
@@ -77,6 +79,27 @@ app = FastAPI(
 async def startup_event():
     """Initialize services during application startup."""
     print("🚀 Starting up Therapy Chatbot API with service container...")
+
+    # Integration config check — a missing key here is the difference between
+    # the main app working and a 503 that says nothing useful.
+    try:
+        from .auth.integration_auth import integration_status
+        st = integration_status()
+        if st["api_key_set"] and st["token_secret_set"]:
+            print(f"🔗 Main app integration READY — key {st['api_key_length']} chars, "
+                  f"tokens valid {st['token_expire_minutes']} min, "
+                  f"auto-link by email: {st['auto_link_by_email']}")
+            print(f"   settings source: {st['source']}")
+        else:
+            missing = []
+            if not st["api_key_set"]:
+                missing.append("INTEGRATION_API_KEY")
+            if not st["token_secret_set"]:
+                missing.append("INTEGRATION_TOKEN_SECRET")
+            print(f"🔗 Main app integration DISABLED — missing {', '.join(missing)} "
+                  f"(/integration/session will return 503)")
+    except Exception as e:
+        print(f"🔗 Integration status check failed: {e}")
 
     # Initialize all services — never raise here so the app always starts.
     # If a service fails, the pipeline nodes will return clear error messages
@@ -113,7 +136,8 @@ async def shutdown_event():
     print("✅ Application shutdown complete")
 
 # Include routers
-app.include_router(auth_router)  # Authentication endpoints
+app.include_router(auth_router)  # Legacy chatbot login — retire after the cutover
+app.include_router(integration_router)  # Token exchange for the main web app
 app.include_router(conversations_router)  # Conversation management
 app.include_router(messages_router)  # Message handling
 app.include_router(voice_router)  # Voice message handling

@@ -1,4 +1,10 @@
 import React from 'react';
+import { isEmbedded } from '../utils/chatToken';
+
+// Wording for the button that leaves the chat when it is embedded in the
+// main web app. That app decides where the user actually goes, so keep this
+// neutral — override with REACT_APP_EXIT_LABEL if they want their own words.
+const EXIT_LABEL = process.env.REACT_APP_EXIT_LABEL || 'Close chat';
 
 const getDateLabel = (dateStr) => {
   const date = new Date(dateStr);
@@ -88,7 +94,7 @@ const Sidebar = ({
       </div>
 
       <button className="logout-btn" onClick={onLogout}>
-        Logout
+        {isEmbedded() ? EXIT_LABEL : 'Logout'}
       </button>
     </>
   );

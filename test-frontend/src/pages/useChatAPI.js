@@ -1,5 +1,6 @@
 import { useCallback } from 'react';
 import axios from 'axios';
+import { getToken, isEmbedded, requestFreshToken } from '../utils/chatToken';
 
 // Same pattern as src/api/api.js — read the backend URL from the build-time
 // env var instead of hardcoding localhost, so this works in production too.
@@ -7,11 +8,13 @@ const API_BASE = process.env.REACT_APP_API_URL || "http://localhost:8000";
 
 // Custom hook for API operations
 const useChatAPI = () => {
-  const token = localStorage.getItem('token') ?? '';
+  const token = getToken() ?? '';
 
   const handleError = useCallback((err, fallbackMessage) => {
     console.error(fallbackMessage, err);
     if (err.response?.status === 401) {
+      // Embedded: ask the parent for a fresh token instead of nagging the user.
+      if (isEmbedded()) { requestFreshToken(); return; }
       alert("Session expired. Please log in again.");
     }
   }, []);

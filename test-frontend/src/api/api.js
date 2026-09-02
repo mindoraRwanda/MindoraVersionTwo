@@ -65,13 +65,11 @@
 // };
 
 import axios from "axios";
+import { authHeader } from "../utils/chatToken";
 
 const API_BASE = process.env.REACT_APP_API_URL || "http://localhost:8000";
 
-const getAuthHeaders = () => {
-  const token = localStorage.getItem("token");
-  return { Authorization: `Bearer ${token}` };
-};
+const getAuthHeaders = () => authHeader();
 
 // ---------- Auth ----------
 export const login = (email, password) =>
@@ -85,6 +83,9 @@ export const forgotPassword = (email) =>
 
 export const resetPassword = (token, newPassword) =>
   axios.post(`${API_BASE}/auth/reset-password`, { token, new_password: newPassword });
+
+export const googleAuth = (credential) =>
+  axios.post(`${API_BASE}/auth/google`, { credential });
 
 // ---------- Conversations ----------
 export const getChats = () =>
@@ -122,12 +123,11 @@ export const sendMessage = async (conversation_id, content) => {
  * SSE events: { token: string } | { done: true, id: string, timestamp: string }
  */
 export const streamMessageResponse = async (conversation_id, content) => {
-  const token = localStorage.getItem("token");
   const response = await fetch(`${API_BASE}/auth/messages/stream`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${token}`,
+      ...authHeader(),
     },
     body: JSON.stringify({ conversation_id, content }),
   });

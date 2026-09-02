@@ -1,10 +1,14 @@
 import os
+import re
 import logging
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
+from google.oauth2 import id_token as google_id_token
+from google.auth.transport import requests as google_requests
 from .schemas import (
     UserCreate, UserLogin, TokenResponse,
     ForgotPasswordRequest, ResetPasswordRequest, MessageResponse,
+    GoogleAuthRequest,
 )
 from .utils import (
     hash_password, verify_password, create_access_token,
@@ -20,6 +24,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000")
+GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "")
 
 if get_environment() == "production" and "localhost" in FRONTEND_URL:
     # FRONTEND_URL is set per-environment on the host (e.g. Render dashboard),
@@ -75,7 +80,12 @@ def signup(user: UserCreate, db: Session = Depends(get_db)):
 def login(user_data: UserLogin, db: Session = Depends(get_db)):
     """Authenticate user and return access token."""
     user = db.query(User).filter(User.email == user_data.email).first()
-    if not user or not verify_password(user_data.password, user.password):
+    if not user or not user.password:
+        # No local password set (e.g. a Google-only account) — same generic
+        # error as a wrong password, so this can't be used to enumerate
+        # which accounts exist or how they authenticate.
+        raise HTTPException(status_code=401, detail="Invalid credentials")
+    if not verify_password(user_data.password, user.password):
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
     token = create_access_token({"sub": str(user.uuid)})
@@ -92,6 +102,81 @@ def login(user_data: UserLogin, db: Session = Depends(get_db)):
     logger.info(f"Login successful for user_id={user.uuid}")
 
     return data
+
+
+def _generate_unique_username(db: Session, base: str) -> str:
+    """Derive a unique, valid username from a Google display name/email local-part."""
+    cleaned = re.sub(r"[^a-zA-Z0-9_]", "", base or "")[:20]
+    if len(cleaned) < 3:
+        cleaned = (cleaned + "user")[:20]
+
+    candidate = cleaned
+    suffix = 0
+    while db.query(User).filter(User.username == candidate).first():
+        suffix += 1
+        suffix_str = str(suffix)
+        candidate = f"{cleaned[:20 - len(suffix_str)]}{suffix_str}"
+
+    return candidate
+
+
+@router.post("/google", response_model=TokenResponse)
+def google_auth(payload: GoogleAuthRequest, db: Session = Depends(get_db)):
+    """
+    Sign in or sign up using a Google ID token obtained on the frontend via
+    Google Identity Services. Verifies the token's signature/audience/issuer
+    with Google directly — the frontend never gets to assert who a user is.
+    """
+    if not GOOGLE_CLIENT_ID:
+        raise HTTPException(status_code=500, detail="Google sign-in is not configured on this server")
+
+    try:
+        idinfo = google_id_token.verify_oauth2_token(
+            payload.credential, google_requests.Request(), GOOGLE_CLIENT_ID
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=401, detail=f"Invalid Google credential: {e}")
+
+    google_sub = idinfo.get("sub")
+    email = idinfo.get("email")
+    email_verified = idinfo.get("email_verified", False)
+    name = idinfo.get("name") or (email.split("@")[0] if email else "user")
+
+    if not google_sub or not email:
+        raise HTTPException(status_code=401, detail="Google credential missing required fields")
+    if not email_verified:
+        raise HTTPException(status_code=401, detail="Google account email is not verified")
+
+    # 1. Already linked to this Google account
+    user = db.query(User).filter(User.google_id == google_sub).first()
+
+    if not user:
+        # 2. Existing password-based account with the same (Google-verified) email — link it
+        user = db.query(User).filter(User.email == email).first()
+        if user:
+            user.google_id = google_sub
+            db.commit()
+            db.refresh(user)
+            logger.info(f"Linked Google account to existing user_id={user.uuid}")
+        else:
+            # 3. Brand new account — no password, Google is the only login method
+            username = _generate_unique_username(db, name)
+            user = User(username=username, email=email, password=None, google_id=google_sub)
+            db.add(user)
+            db.commit()
+            db.refresh(user)
+            logger.info(f"Created new user via Google sign-in: user_id={user.uuid}")
+
+    token = create_access_token({"sub": str(user.uuid)})
+    logger.info(f"Google sign-in successful for user_id={user.uuid}")
+
+    return {
+        "access_token": token,
+        "token_type": "bearer",
+        "user_id": user.uuid,
+        "username": user.username,
+        "gender": user.gender,
+    }
 
 
 @router.post("/forgot-password", response_model=MessageResponse)

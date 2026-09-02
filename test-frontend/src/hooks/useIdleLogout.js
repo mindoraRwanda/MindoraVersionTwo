@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { logout } from '../utils/auth';
+import { getToken, isEmbedded } from '../utils/chatToken';
 
 const IDLE_TIMEOUT_MS = 3 * 60 * 1000; // 3 minutes
 const ACTIVITY_EVENTS = ['mousedown', 'mousemove', 'keydown', 'touchstart', 'scroll', 'wheel'];
@@ -11,10 +12,15 @@ export default function useIdleLogout() {
   const timerRef = useRef(null);
 
   useEffect(() => {
+    // Embedded in the main web app: that app owns session lifetime, and this
+    // hook cannot see activity in the parent page, so it would sign people out
+    // mid-conversation. Do nothing.
+    if (isEmbedded()) return;
+
     const resetTimer = () => {
       if (timerRef.current) clearTimeout(timerRef.current);
       timerRef.current = setTimeout(() => {
-        if (localStorage.getItem('token')) {
+        if (getToken()) {
           logout('idle');
         }
       }, IDLE_TIMEOUT_MS);

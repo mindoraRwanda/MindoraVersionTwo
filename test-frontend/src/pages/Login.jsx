@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
+import GoogleSignInButton from './GoogleSignInButton';
 
 // Same pattern as src/api/api.js — read the backend URL from the build-time
 // env var instead of hardcoding localhost, so this works in production too.
@@ -169,6 +170,25 @@ export default function Login() {
           color: #dc2626;
           font-size: 14px;
         }
+        .auth-divider {
+          display: flex;
+          align-items: center;
+          gap: 12px;
+          margin: 18px 0;
+          color: #9ca3af;
+          font-size: 13px;
+        }
+        .auth-divider::before,
+        .auth-divider::after {
+          content: '';
+          flex: 1;
+          height: 1px;
+          background: #e5e7eb;
+        }
+        .google-signin-btn {
+          display: flex;
+          justify-content: center;
+        }
         .welcome-panel {
           width: 50%;
           background: linear-gradient(to bottom right, rgb(109, 40, 217), rgb(91, 33, 182));
@@ -285,6 +305,9 @@ export default function Login() {
               </button>
             </div>
           </form>
+
+          <div className="auth-divider"><span>or</span></div>
+          <GoogleSignInButton onError={setStatus} />
 
           {status && <p className="error-msg">{status}</p>}
         </div>

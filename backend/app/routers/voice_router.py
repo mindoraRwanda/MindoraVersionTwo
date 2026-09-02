@@ -11,7 +11,7 @@ from gtts import gTTS
 import base64
 from io import BytesIO
 
-from ..auth.utils import get_current_user
+from ..auth.integration_auth import get_current_user
 from ..db.database import SessionLocal
 from ..db.models import User, Conversation, Message, EmotionLog
 from ..auth.schemas import MessageOut, UserOut
@@ -53,8 +53,24 @@ def get_whisper_model() -> WhisperModel:
         _whisper_model = WhisperModel(MODEL_SIZE, device=DEVICE, compute_type=COMPUTE_TYPE)
     return _whisper_model
 
+def _resolve_ffmpeg_exe() -> str:
+    """Prefer the bundled ffmpeg binary from imageio-ffmpeg — no system
+    install or PATH setup needed, and it works the same in local dev and in
+    containers (Render/Railway/etc.) that don't have ffmpeg preinstalled.
+    Falls back to a system 'ffmpeg' on PATH if the package is unavailable."""
+    try:
+        import imageio_ffmpeg
+        return imageio_ffmpeg.get_ffmpeg_exe()
+    except Exception as e:
+        logger.warning(f"imageio_ffmpeg unavailable ({e}); falling back to system ffmpeg on PATH")
+        return "ffmpeg"
+
+
+_FFMPEG_EXE = _resolve_ffmpeg_exe()
+
+
 def _to_wav_16k_mono(src_path: str, dst_path: str):
-    cmd = ["ffmpeg", "-y", "-i", src_path, "-ac", "1", "-ar", "16000", "-f", "wav", dst_path]
+    cmd = [_FFMPEG_EXE, "-y", "-i", src_path, "-ac", "1", "-ar", "16000", "-f", "wav", dst_path]
     p = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     if p.returncode != 0:
         raise RuntimeError(p.stderr.decode(errors="ignore")[:2000])
@@ -124,8 +140,14 @@ async def voice_message(
         .all()
 
     recent_history.reverse()
+    # msg.sender is a SenderType enum (e.g. SenderType.user), not a plain
+    # string — every downstream role check does str(role).lower() == "user"/
+    # "bot", which never matches "SenderType.user"/"SenderType.bot". Extract
+    # .value so history actually works the same way the (already-correct)
+    # streaming text endpoint does.
     conversation_history = [
-        {"role": msg.sender, "text": msg.content} for msg in recent_history
+        {"role": (msg.sender.value if hasattr(msg.sender, "value") else msg.sender), "text": msg.content}
+        for msg in recent_history
     ]
     history_time = time.time() - history_start
     print(f"⏱️  DB history load: {history_time:.3f}s ({len(recent_history)} messages)")
@@ -219,12 +241,32 @@ async def voice_message(
     # --- Text-to-Speech ---
     tts_start = time.time()
     audio_bytes = None
+    # gTTS was previously hardcoded to lang='en' regardless of what language
+    # the reply is actually in — a Kinyarwanda or French reply would be read
+    # aloud with English pronunciation, coming out as unintelligible noise.
+    # Detect the reply's real language and only synthesize when gTTS actually
+    # has a voice for it (it has none for Kinyarwanda) — silence is better
+    # than confidently mispronouncing the wrong language.
+    tts_lang = "en"
     try:
-        tts = gTTS(text=bot_reply, lang='en', slow=False)
-        mp3_fp = BytesIO()
-        tts.write_to_fp(mp3_fp)
-        mp3_fp.seek(0)
-        audio_bytes = mp3_fp.read()
+        from langdetect import detect as _langdetect
+        detected = _langdetect(bot_reply)
+        if detected in ("en", "fr"):
+            tts_lang = detected
+        else:
+            tts_lang = None  # no supported voice (e.g. Kinyarwanda) — skip TTS
+    except Exception as e:
+        print(f"Reply language detection failed, defaulting to English TTS: {e}")
+
+    try:
+        if tts_lang:
+            tts = gTTS(text=bot_reply, lang=tts_lang, slow=False)
+            mp3_fp = BytesIO()
+            tts.write_to_fp(mp3_fp)
+            mp3_fp.seek(0)
+            audio_bytes = mp3_fp.read()
+        else:
+            print(f"Skipping TTS — no supported voice for detected reply language")
     except Exception as e:
         print(f"TTS generation failed: {e}")
 
@@ -232,6 +274,13 @@ async def voice_message(
     print(f"⏱️  TTS generation: {tts_time:.3f}s")
 
     return {
+        "transcript": clean_content,
+        "emotion": detected_emotion,
+        "response": {
+            "content": bot_msg.content,
+            "timestamp": bot_msg.timestamp,
+        },
+        # Kept flat too for any caller still reading the old shape directly.
         "id": bot_msg.uuid,
         "sender": bot_msg.sender.value,
         "content": bot_msg.content,

@@ -52,6 +52,7 @@ export default function ChatDashboard() {
   const [audioURL, setAudioURL] = useState('');
   const [recordError, setRecordError] = useState(null);
   const [recordDurationMs, setRecordDurationMs] = useState(0);
+  const [voiceSendError, setVoiceSendError] = useState(null);
 
   const mediaRecorderRef = useRef(null);
   const mediaChunksRef = useRef([]);
@@ -301,6 +302,7 @@ export default function ChatDashboard() {
 
     if (!hasStartedChat) setHasStartedChat(true);
     setLoading(true);
+    setVoiceSendError(null);
 
     // (Optional) show a placeholder “voice message sent” bubble
     const voicePlaceholder = {
@@ -355,6 +357,15 @@ export default function ChatDashboard() {
       setMessages(prev => [...prev, botMsg]);
     } catch (err) {
       handleError(err, 'Failed to send voice message');
+      // Surface something visible — handleError only alerts on 401, so
+      // every other failure (transcription, ffmpeg, pipeline error, network)
+      // would otherwise vanish with zero feedback and just look "broken."
+      const backendDetail = err.response?.data?.detail;
+      setVoiceSendError(
+        typeof backendDetail === 'string'
+          ? backendDetail
+          : 'Failed to send voice message. Please try again.'
+      );
       // remove placeholder
       setMessages(prev => prev.filter(m => m !== voicePlaceholder));
     } finally {
@@ -456,6 +467,10 @@ export default function ChatDashboard() {
               )}
               <div ref={messagesEndRef} />
             </div>
+
+            {voiceSendError && (
+              <div className="error-message voice-send-error">{voiceSendError}</div>
+            )}
 
             {selectedChat && (
               <div className="input-bar">

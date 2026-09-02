@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { register, startNewChat } from '../api/api';
+import GoogleSignInButton from './GoogleSignInButton';
 
 const GENDER_OPTIONS = [
   { value: '', label: 'Select Gender (Optional)' },
@@ -215,6 +216,25 @@ export default function Register() {
           color: #dc2626;
           font-size: 14px;
         }
+        .auth-divider {
+          display: flex;
+          align-items: center;
+          gap: 12px;
+          margin: 18px 0;
+          color: #9ca3af;
+          font-size: 13px;
+        }
+        .auth-divider::before,
+        .auth-divider::after {
+          content: '';
+          flex: 1;
+          height: 1px;
+          background: #e5e7eb;
+        }
+        .google-signin-btn {
+          display: flex;
+          justify-content: center;
+        }
 
         .welcome-panel {
           width: 50%;
@@ -362,6 +382,9 @@ export default function Register() {
               Register
             </button>
           </form>
+
+          <div className="auth-divider"><span>or</span></div>
+          <GoogleSignInButton onError={setError} />
 
           {error && <p className="error-msg">{error}</p>}
         </div>

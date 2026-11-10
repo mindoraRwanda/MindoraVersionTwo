@@ -18,9 +18,15 @@ RUN apt-get update && apt-get install -y \
 # This layer will only rebuild if requirements.txt changes
 COPY requirements.txt .
 
-# Upgrade pip and install Python dependencies
-# This layer is cached unless requirements.txt changes
+# Upgrade build tooling, then install CPU-only PyTorch. The production
+# Railway service has no CUDA GPU; the application already falls back to CPU.
+# Pinning the CPU wheels avoids pulling NVIDIA runtime libraries while keeping
+# SentenceTransformers and Transformers available for RAG and emotion analysis.
 RUN pip install --upgrade pip setuptools wheel \
+    && pip install --no-cache-dir \
+       --index-url https://download.pytorch.org/whl/cpu \
+       --extra-index-url https://pypi.org/simple \
+       torch==2.3.0+cpu torchvision==0.18.0+cpu \
     && pip install --no-cache-dir -r requirements.txt
 
 # Copy application code last

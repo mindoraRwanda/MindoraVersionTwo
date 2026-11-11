@@ -3,6 +3,7 @@ import re
 import logging
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
+from sqlalchemy.exc import IntegrityError
 from google.oauth2 import id_token as google_id_token
 from google.auth.transport import requests as google_requests
 from .schemas import (
@@ -63,7 +64,20 @@ def signup(user: UserCreate, db: Session = Depends(get_db)):
     new_user = User(username=user.username, email=user.email, password=hashed_pw, gender=user.gender)
 
     db.add(new_user)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        # The pre-insert lookups above are not atomic: two signup requests can
+        # pass them at the same time. Let the database unique constraints remain
+        # authoritative, then translate a race into the same safe client error
+        # as the normal duplicate checks instead of returning an unhandled 500.
+        db.rollback()
+        if db.query(User).filter(User.email == user.email).first():
+            raise HTTPException(status_code=400, detail="Email already in use")
+        if db.query(User).filter(User.username == user.username).first():
+            raise HTTPException(status_code=400, detail="Username already taken")
+        logger.exception("Signup failed due to an unexpected integrity constraint")
+        raise HTTPException(status_code=409, detail="Account could not be created; please try again")
     db.refresh(new_user)
 
     token = create_access_token(data={"sub": str(new_user.uuid)})

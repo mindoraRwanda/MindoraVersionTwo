@@ -3,6 +3,8 @@ from fastapi.responses import StreamingResponse
 import bleach
 import time
 import json
+from datetime import datetime, timezone
+from uuid import uuid4
 from collections import defaultdict, deque
 from sqlalchemy.orm import Session
 from typing import List, Dict, Any, Optional
@@ -12,6 +14,11 @@ from ..db.database import SessionLocal
 from ..db.models import Conversation, Message, User, EmotionLog
 from ..auth.schemas import MessageCreate, MessageOut, UserOut
 from ..services.stateful_pipeline import StatefulMentalHealthPipeline
+from ..services.crisis_webhook import (
+    crisis_level_from_assessment,
+    crisis_safety_response,
+    send_crisis_webhook,
+)
 
 from ..services.session_state_manager import session_manager
 from ..dependencies import get_stateful_pipeline
@@ -198,6 +205,12 @@ async def send_message(
         workflow_time = time.time() - workflow_start
         print(f"⏱️  Fallback processing: {workflow_time:.3f}s")
 
+    # Crisis levels 3–5 bypass generative output and return a stable safety response.
+    crisis_assessment = pipeline_result.get("crisis_assessment")
+    crisis_level = crisis_level_from_assessment(crisis_assessment)
+    if crisis_level >= 3:
+        bot_reply = crisis_safety_response()
+
     # Get emotion data from stateful pipeline result
     emotion_detection = pipeline_result.get("emotion_detection") if 'pipeline_result' in locals() else None
     detected_emotion = emotion_detection.selected_emotion if emotion_detection and hasattr(emotion_detection, 'selected_emotion') else "neutral"
@@ -226,6 +239,43 @@ async def send_message(
     db.add_all([bot_msg, emotion_log])
     convo.last_activity_at = bot_msg.timestamp
     db.commit()
+
+    if crisis_level >= 3:
+        context_messages = []
+        for previous_message in recent_history[-3:]:
+            sender = (
+                previous_message.sender.value
+                if hasattr(previous_message.sender, "value")
+                else str(previous_message.sender)
+            )
+            context_messages.append(
+                {"role": sender, "text": (previous_message.content or "")[:700]}
+            )
+        context_messages.extend(
+            [
+                {"role": "user", "text": clean_content[:700]},
+                {"role": "assistant", "text": bot_reply[:700]},
+            ]
+        )
+        conversation_excerpt = "\n\n".join(
+            f"{item['role']}: {item['text']}" for item in context_messages
+        )[:5000]
+        external_user_ref = str(
+            getattr(user, "external_id", None)
+            or getattr(user, "uuid", None)
+            or user.id
+        )
+        background.add_task(
+            send_crisis_webhook,
+            event_id=str(uuid4()),
+            occurred_at=datetime.now(timezone.utc).isoformat(),
+            crisis_level=crisis_level,
+            conversation_id=str(convo.uuid),
+            external_user_ref=external_user_ref,
+            interaction_id=str(user_msg.uuid),
+            message_excerpt=clean_content[:1500],
+            conversation_excerpt=conversation_excerpt,
+        )
 
     # Generate a title after the very first exchange (no prior history)
     if len(conversation_history) == 0 and stateful_pipeline.llm_provider:

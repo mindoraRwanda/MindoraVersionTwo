@@ -255,13 +255,24 @@ def _send_via_sendgrid(*, to_email: str, subject: str, text: str, html: str | No
             json=payload,
             timeout=20,
         )
+        if resp.status_code in (401, 403) and RESEND_API_KEY:
+            # A SendGrid 401/403 means the key, sender, or account quota is
+            # rejected. This is a definitive non-acceptance, so it is safe to
+            # try the configured Resend provider without risking duplicate mail.
+            logging.warning(
+                "[email fallback] SendGrid rejected the request (HTTP %s); trying Resend",
+                resp.status_code,
+            )
+            return _send_via_resend(
+                to_email=to_email, subject=subject, text=text, html=html
+            )
         if resp.status_code >= 400:
-            logging.error(f"[email failed] to={to_email} via SendGrid: {resp.status_code} {resp.text}")
+            logging.error("[email failed] provider=SendGrid status=%s", resp.status_code)
             return False
-        logging.info(f"[email sent] to={to_email} via SendGrid")
+        logging.info("[email sent] provider=SendGrid")
         return True
-    except Exception as e:
-        logging.exception(f"[email failed] to={to_email} via SendGrid: {e}")
+    except Exception:
+        logging.exception("[email failed] provider=SendGrid request error")
         return False
 
 
@@ -288,12 +299,12 @@ def _send_via_resend(*, to_email: str, subject: str, text: str, html: str | None
             timeout=20,
         )
         if resp.status_code >= 400:
-            logging.error(f"[email failed] to={to_email} via Resend: {resp.status_code} {resp.text}")
+            logging.error("[email failed] provider=Resend status=%s", resp.status_code)
             return False
-        logging.info(f"[email sent] to={to_email} via Resend")
+        logging.info("[email sent] provider=Resend")
         return True
-    except Exception as e:
-        logging.exception(f"[email failed] to={to_email} via Resend: {e}")
+    except Exception:
+        logging.exception("[email failed] provider=Resend request error")
         return False
 
 
@@ -317,10 +328,10 @@ def _send_via_smtp(*, to_email: str, subject: str, text: str, html: str | None) 
             if SMTP_USER:
                 s.login(SMTP_USER, SMTP_PASS)
             s.send_message(msg)
-        logging.info(f"[email sent] to={to_email} via {SMTP_HOST}:{SMTP_PORT}")
+        logging.info("[email sent] provider=SMTP")
         return True
-    except Exception as e:
-        logging.exception(f"[email failed] to={to_email}: {e}")
+    except Exception:
+        logging.exception("[email failed] provider=SMTP request error")
         return False
 
 
@@ -329,13 +340,15 @@ def send_therapist_alert(*, to_email: str, subject: str, text: str, html: str | 
 
     Uses an HTTP-based provider when configured (required on hosts that block
     outbound SMTP, e.g. Render/Railway) — otherwise falls back to direct SMTP.
-    Priority: SendGrid > Resend > SMTP, based on which API key is set.
+    SendGrid is primary; HTTP 401/403 can fall back to Resend. SMTP is the
+    local-development fallback when neither HTTPS provider is configured.
     """
-    logging.info(f"🚨 send_therapist_alert: Attempting to send email to {to_email} with subject: {subject}")
-    logging.info(f"🚨 send_therapist_alert: EMAILS_ENABLED = {EMAILS_ENABLED}")
+    # Do not log recipient addresses, patient names, crisis subjects, or excerpts.
+    logging.info("Transactional email requested")
+    logging.info("EMAILS_ENABLED = %s", EMAILS_ENABLED)
 
     if not EMAILS_ENABLED:
-        logging.info(f"[email disabled] would send to={to_email} subj={subject!r}")
+        logging.info("[email disabled] transactional email not sent")
         return False
 
     if SENDGRID_API_KEY:

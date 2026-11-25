@@ -114,3 +114,27 @@ async def send_crisis_webhook(
             await asyncio.sleep(0.5 * (2**attempt))
 
     logger.error("MINDORA crisis webhook exhausted retries for event %s", event_id)
+
+
+def crisis_safety_response() -> str:
+    """Return the approved general-support message; emergency resources stay gated."""
+    response = (
+        "I'm really glad you told me. Your safety matters, and you deserve support right now. "
+        "If you may act on these thoughts, have already hurt yourself, or cannot stay safe, "
+        "please contact local emergency services or go to the nearest emergency department now. "
+        "If possible, move away from anything you could use to hurt yourself and stay with "
+        "someone you trust while you get help. For general MINDORA support during published "
+        "business hours (Monday to Friday, 9:00 AM–5:00 PM), call +250 783 974-066 or email "
+        "info@mindora.rw (stated response time within 24 hours). These are general support "
+        "contacts, not emergency services or a 24/7 crisis hotline. For therapist follow-up "
+        "when safe, visit https://app.mindora.rw/therapists."
+    )
+    if os.getenv("CRISIS_CONTACTS_APPROVED", "").lower() == "true":
+        approved = [
+            item.strip()
+            for item in os.getenv("CRISIS_APPROVED_RESOURCES", "").split(";")
+            if item.strip()
+        ]
+        if approved:
+            response += " MINDORA-approved resources: " + "; ".join(approved) + "."
+    return response

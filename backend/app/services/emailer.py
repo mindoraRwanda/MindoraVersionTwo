@@ -340,14 +340,15 @@ def send_therapist_alert(*, to_email: str, subject: str, text: str, html: str | 
 
     Uses an HTTP-based provider when configured (required on hosts that block
     outbound SMTP, e.g. Render/Railway) — otherwise falls back to direct SMTP.
-    Priority: SendGrid > Resend > SMTP, based on which API key is set.
+    SendGrid is primary; HTTP 401/403 can fall back to Resend. SMTP is the
+    local-development fallback when neither HTTPS provider is configured.
     """
     # Do not log recipient addresses, patient names, crisis subjects, or excerpts.
     logging.info("Transactional email requested")
     logging.info("EMAILS_ENABLED = %s", EMAILS_ENABLED)
 
     if not EMAILS_ENABLED:
-        logging.info(f"[email disabled] would send to={to_email} subj={subject!r}")
+        logging.info("[email disabled] transactional email not sent")
         return False
 
     if SENDGRID_API_KEY:
